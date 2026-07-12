@@ -1,10 +1,11 @@
 {
   "name": "alos-second-mind",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "graph": "tsx scripts/build-graph.ts",
+    "build": "npm run graph && next build",
     "start": "next start"
   },
   "dependencies": {
@@ -18,6 +19,7 @@
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }
