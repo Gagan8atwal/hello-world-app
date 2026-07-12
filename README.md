@@ -1,6 +1,6 @@
 # ALOS — Second Mind
 
-A local-first founder cognitive operating system.
+A private founder cognitive operating system for Gagandeep Singh.
 
 ## Working features
 - Natural-language capture
@@ -10,6 +10,15 @@ A local-first founder cognitive operating system.
 - Highest-ROI recommendation
 - Feedback tracking
 - JSON backup
+- Secure Supabase email-link authentication
+- Cross-device cloud synchronization
+- Automatic migration of existing browser-local captures after sign-in
 - Mobile-first interface
 
-Data is stored in browser localStorage for this MVP. No external AI platform or API key is required.
+## Architecture
+- Next.js on Vercel
+- Supabase Auth + Postgres + RLS
+- GitHub as source control
+- Markdown vault and generated graph support
+
+The current production deployment should be created automatically from the connected `main` branch after this commit.
