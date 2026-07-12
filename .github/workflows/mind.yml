@@ -1,0 +1,38 @@
+name: ALOS Mind Loop
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 13 * * *'   # 06:00 America/Los_Angeles during PDT
+    - cron: '0 6 * * *'    # 23:00 America/Los_Angeles during PDT
+    - cron: '0 3 * * 1'    # Sunday 20:00 America/Los_Angeles during PDT
+
+permissions:
+  contents: write
+
+jobs:
+  maintain-graph:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run graph
+      - name: Commit generated graph when changed
+        run: |
+          git config user.name "ALOS Mind"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/graph.json
+          git diff --cached --quiet || git commit -m "chore: rebuild mind graph"
+          git push
+
+  scheduled-loop-placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Document automation boundary
+        run: |
+          echo "Graph maintenance is active. AI-generated briefs and synthesis require a configured model provider secret and will not fabricate content without one."
