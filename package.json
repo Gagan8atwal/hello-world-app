@@ -1,6 +1,6 @@
 {
   "name": "alos-second-mind",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
     "next": "16.0.10",
     "react": "19.2.0",
     "react-dom": "19.2.0",
