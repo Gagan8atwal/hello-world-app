@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 const OWNER = "Gagan8atwal";
@@ -5,7 +6,7 @@ const REPO = "al-solutions-command-center";
 const PATH = "alos-private-memory/data/brain.json";
 const API = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
 
-function headers() {
+function githubHeaders() {
   const token = process.env.ALOS_GITHUB_TOKEN;
   if (!token) throw new Error("ALOS_GITHUB_TOKEN is not configured");
   return {
@@ -16,12 +17,20 @@ function headers() {
   };
 }
 
-export async function GET() {
+function authorized(request: NextRequest) {
+  const expected = process.env.ALOS_ACCESS_KEY;
+  const received = request.headers.get("x-alos-key") ?? "";
+  if (!expected || !received) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export async function GET(request: NextRequest) {
+  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const response = await fetch(API, { headers: headers(), cache: "no-store" });
-    if (!response.ok) {
-      return NextResponse.json({ error: "Unable to load private memory" }, { status: response.status });
-    }
+    const response = await fetch(API, { headers: githubHeaders(), cache: "no-store" });
+    if (!response.ok) return NextResponse.json({ error: "Unable to load private memory" }, { status: response.status });
     const file = await response.json();
     const json = Buffer.from(file.content, "base64").toString("utf8");
     return NextResponse.json({ data: JSON.parse(json), sha: file.sha });
@@ -31,15 +40,15 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  if (!authorized(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const { data, sha } = await request.json();
-    if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links)) {
+    if (!data || !Array.isArray(data.nodes) || !Array.isArray(data.links) || !Array.isArray(data.feedback)) {
       return NextResponse.json({ error: "Invalid memory payload" }, { status: 400 });
     }
-
     const response = await fetch(API, {
       method: "PUT",
-      headers: headers(),
+      headers: githubHeaders(),
       body: JSON.stringify({
         message: "chore: sync ALOS memory",
         content: Buffer.from(JSON.stringify(data, null, 2), "utf8").toString("base64"),
@@ -47,12 +56,8 @@ export async function PUT(request: NextRequest) {
         branch: "main",
       }),
     });
-
     const result = await response.json();
-    if (!response.ok) {
-      return NextResponse.json({ error: result.message || "Unable to save memory" }, { status: response.status });
-    }
-
+    if (!response.ok) return NextResponse.json({ error: result.message || "Unable to save memory" }, { status: response.status });
     return NextResponse.json({ ok: true, sha: result.content.sha });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });
