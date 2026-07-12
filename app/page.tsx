@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Brain, BriefcaseBusiness, CheckCircle2, Cloud, Download, GitBranch, LayoutDashboard, Lightbulb, ListChecks, LockKeyhole, MemoryStick, Plus, Search, Target } from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, Brain, BriefcaseBusiness, CheckCircle2, Cloud, Download, GitBranch, LayoutDashboard, Lightbulb, ListChecks, LockKeyhole, LogOut, MemoryStick, Plus, Search, Target } from "lucide-react";
 
 const Graph = dynamic(() => import("react-force-graph-2d"), { ssr: false });
 
@@ -38,49 +38,66 @@ export default function Home() {
   const [status, setStatus] = useState("Locked");
   const [saving, setSaving] = useState(false);
   const [kindFilter, setKindFilter] = useState<Kind | "all">("all");
-
-  useEffect(() => {
-    const cached = localStorage.getItem("alos-cache");
-    if (cached) try { setStore(JSON.parse(cached)); } catch {}
-    const saved = sessionStorage.getItem("alos-access-key");
-    if (saved) setAccessKey(saved);
-  }, []);
-
-  useEffect(() => { localStorage.setItem("alos-cache", JSON.stringify(store)); }, [store]);
+  const [hovered, setHovered] = useState<string | null>(null);
 
   async function unlock() {
-    setStatus("Loading private memory...");
+    setStatus("Checking password...");
     const response = await fetch("/api/memory", { headers: { "x-alos-key": accessKey } });
     const result = await response.json();
-    if (!response.ok) { setStatus(response.status === 401 ? "Wrong access key" : result.error || "Unable to load memory"); return; }
-    setStore(result.data); setSha(result.sha); setUnlocked(true);
-    sessionStorage.setItem("alos-access-key", accessKey);
-    setStatus(`GitHub synced • ${result.data.nodes.length} records`);
+    if (!response.ok) {
+      setStatus(response.status === 401 ? "Wrong password" : result.error || "Unable to unlock");
+      return;
+    }
+    setStore(result.data);
+    setSha(result.sha);
+    setUnlocked(true);
+    setStatus(`Private memory synced • ${result.data.nodes.length} records`);
+  }
+
+  function lock() {
+    setStore(emptyStore);
+    setSha("");
+    setAccessKey("");
+    setSelected(null);
+    setUnlocked(false);
+    setStatus("Locked");
   }
 
   async function persist(next: Store) {
-    if (!unlocked) { setStatus("Saved offline. Unlock to sync."); return; }
     setSaving(true);
-    const response = await fetch("/api/memory", { method: "PUT", headers: { "Content-Type": "application/json", "x-alos-key": accessKey }, body: JSON.stringify({ data: next, sha }) });
+    const response = await fetch("/api/memory", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-alos-key": accessKey },
+      body: JSON.stringify({ data: next, sha }),
+    });
     const result = await response.json();
-    if (response.ok) { setSha(result.sha); setStatus("Saved to private GitHub memory"); }
-    else setStatus(result.error || "Sync failed; local copy preserved");
+    if (response.ok) {
+      setSha(result.sha);
+      setStatus("Saved to private GitHub memory");
+    } else {
+      setStatus(result.error || "Sync failed");
+    }
     setSaving(false);
   }
 
   async function add() {
-    const body = text.trim(); if (!body) return;
-    const kind = classify(body); const id = `${kind}-${Date.now()}`;
+    const body = text.trim();
+    if (!body) return;
+    const kind = classify(body);
+    const id = `${kind}-${Date.now()}`;
     const node: Node = { id, kind, title: body.length > 72 ? `${body.slice(0, 69)}...` : body, body, created: new Date().toISOString() };
     const refs = store.nodes.filter((x) => x.kind === "company" && body.toLowerCase().includes(x.title.toLowerCase().replace(" llc", "")));
     const newLinks = refs.map((r) => ({ source: id, target: r.id, type: "belongs_to" }));
     const next = { ...store, nodes: [node, ...store.nodes], links: [...newLinks, ...store.links] };
-    setStore(next); setText(""); await persist(next);
+    setStore(next);
+    setText("");
+    await persist(next);
   }
 
   async function addFeedback(nodeId: string, useful: boolean) {
     const next = { ...store, feedback: [...store.feedback.filter((f) => (f.id ?? f.node_id) !== nodeId), { id: nodeId, useful }] };
-    setStore(next); await persist(next);
+    setStore(next);
+    await persist(next);
   }
 
   const byKind = (kind: Kind) => store.nodes.filter((n) => n.kind === kind);
@@ -104,14 +121,31 @@ export default function Home() {
 
   function related(nodeId: string) {
     const ids = new Set(store.links.flatMap((l) => l.source === nodeId ? [l.target] : l.target === nodeId ? [l.source] : []));
-    return store.nodes.filter((n) => ids.has(n.id)).slice(0, 6);
+    return store.nodes.filter((n) => ids.has(n.id)).slice(0, 8);
   }
 
   function backup() {
-    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(store, null, 2)], { type: "application/json" })); a.download = "alos-backup.json"; a.click();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(store, null, 2)], { type: "application/json" }));
+    a.download = "alos-backup.json";
+    a.click();
   }
 
-  const titles: Record<Tab, string> = { home: "Command Center", projects: "Projects", decisions: "Decisions", memory: "Memory", graph: "Knowledge Graph" };
+  if (!unlocked) {
+    return <main className="lock-screen">
+      <section className="lock-card">
+        <div className="lock-mark"><Brain/></div>
+        <small>PRIVATE FOUNDER OPERATING SYSTEM</small>
+        <h1>ALOS Second Mind</h1>
+        <p>Your projects, decisions, risks, memories, and graph remain hidden until you enter your password.</p>
+        <input type="password" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && unlock()} placeholder="Enter private password" autoFocus />
+        <button onClick={unlock}><LockKeyhole/>Unlock ALOS</button>
+        <span>{status}</span>
+      </section>
+    </main>;
+  }
+
+  const titles: Record<Tab, string> = { home: "Command Center", projects: "Projects", decisions: "Decisions", memory: "Memory", graph: "Knowledge Map" };
 
   return <main>
     <aside>
@@ -120,23 +154,23 @@ export default function Home() {
       <button onClick={() => setTab("projects")} className={tab === "projects" ? "active" : ""}><BriefcaseBusiness/>Projects</button>
       <button onClick={() => setTab("decisions")} className={tab === "decisions" ? "active" : ""}><ListChecks/>Decisions</button>
       <button onClick={() => setTab("memory")} className={tab === "memory" ? "active" : ""}><MemoryStick/>Memory</button>
-      <button onClick={() => setTab("graph")} className={tab === "graph" ? "active" : ""}><GitBranch/>Graph</button>
+      <button onClick={() => setTab("graph")} className={tab === "graph" ? "active" : ""}><GitBranch/>Map</button>
       <button onClick={backup}><Download/>Backup</button>
+      <button onClick={lock}><LogOut/>Lock</button>
     </aside>
 
     <section className="work">
-      <header><div><small>Gagandeep&apos;s cognitive operating system</small><h1>{titles[tab]}</h1></div><label><Search/><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search everything"/></label></header>
-
-      {!unlocked && <section className="capture unlock"><div><strong>Unlock private memory</strong><p>No Supabase login. Enter your private ALOS access key.</p><input type="password" value={accessKey} onChange={(e) => setAccessKey(e.target.value)} onKeyDown={(e) => e.key === "Enter" && unlock()}/></div><button onClick={unlock}><LockKeyhole/>Unlock</button></section>}
+      <header>
+        <div><small>Gagandeep&apos;s cognitive operating system</small><h1>{titles[tab]}</h1></div>
+        <label><Search/><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search everything"/></label>
+      </header>
 
       <div className="capture"><textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Write naturally: decision, blocker, task, lesson, pattern, risk, idea..."/><button onClick={add} disabled={saving}><Plus/>{saving ? "Saving" : "Save"}</button></div>
       <p className="sync"><Cloud size={15}/>{status}</p>
 
       {tab === "home" && <>
-        <section className="hero"><span>Highest-ROI next action</span><h2>{action}</h2><p>Prioritized from your open tasks and risks.</p></section>
-        <div className="metric-grid">
-          <article><b>{projects.length}</b><span>Active projects</span></article><article><b>{tasks.length}</b><span>Open tasks</span></article><article><b>{risks.length}</b><span>Risks</span></article><article><b>{decisions.length}</b><span>Decisions</span></article>
-        </div>
+        <section className="hero"><span>Highest-ROI next action</span><h2>{action}</h2><p>Prioritized from your current tasks and risks.</p></section>
+        <div className="metric-grid"><article><b>{projects.length}</b><span>Projects</span></article><article><b>{tasks.length}</b><span>Open tasks</span></article><article><b>{risks.length}</b><span>Risks</span></article><article><b>{decisions.length}</b><span>Decisions</span></article></div>
         <div className="dashboard-grid">
           <section className="panel"><div className="panel-title"><Target/>Today&apos;s focus</div>{tasks.slice(0,4).map(n=><button className="row" key={n.id} onClick={()=>setSelected(n)}><span>{n.title}</span><small>{n.kind}</small></button>)}</section>
           <section className="panel"><div className="panel-title"><AlertTriangle/>Current blockers</div>{risks.slice(0,4).map(n=><button className="row" key={n.id} onClick={()=>setSelected(n)}><span>{n.title}</span><small>risk</small></button>)}</section>
@@ -146,14 +180,18 @@ export default function Home() {
       </>}
 
       {tab === "projects" && <div className="project-grid">{projects.map(project => {
-        const connected = related(project.id); return <article className="project-card" key={project.id} onClick={()=>setSelected(project)}><div className="type"><i className="company"/>project</div><h2>{project.title}</h2><p>{project.body}</p><div className="project-meta"><span>{connected.filter(n=>n.kind==="task").length} tasks</span><span>{connected.filter(n=>n.kind==="risk").length} risks</span><span>{connected.length} links</span></div></article>
+        const connected = related(project.id);
+        return <article className="project-card" key={project.id} onClick={()=>setSelected(project)}><div className="type"><i className="company"/>project</div><h2>{project.title}</h2><p>{project.body}</p><div className="project-meta"><span>{connected.filter(n=>n.kind==="task").length} tasks</span><span>{connected.filter(n=>n.kind==="risk").length} risks</span><span>{connected.length} links</span></div></article>
       })}</div>}
 
       {tab === "decisions" && <div className="timeline">{decisions.map(n=><article key={n.id} onClick={()=>setSelected(n)}><div className="type"><i className="decision"/>decision</div><h3>{n.title}</h3><p>{n.body}</p><small>{n.created || n.created_at || "Stored decision"}</small></article>)}</div>}
 
       {tab === "memory" && <><div className="filters"><button className={kindFilter==="all"?"active":""} onClick={()=>setKindFilter("all")}>All</button>{kinds.map(k=><button key={k} className={kindFilter===k?"active":""} onClick={()=>setKindFilter(k)}>{k}</button>)}</div><div className="grid">{visible.map(n=><article key={n.id} className="card" onClick={()=>setSelected(n)}><div className="type"><i className={n.kind}/>{n.kind}</div><h3>{n.title}</h3><p>{n.body}</p></article>)}</div></>}
 
-      {tab === "graph" && <><div className="legend">{kinds.map(k=><span key={k}><i className={k}/>{k}</span>)}</div><div className="graph"><Graph graphData={graphData} nodeAutoColorBy="kind" nodeLabel="title" linkLabel={(l:any)=>l.type} linkDirectionalArrowLength={3} nodeCanvasObject={(node:any,ctx:any,scale:number)=>{ctx.font=`${12/scale}px sans-serif`;ctx.fillStyle=node.color;ctx.beginPath();ctx.arc(node.x,node.y,5,0,2*Math.PI);ctx.fill();ctx.fillStyle="#dfe4ef";ctx.fillText(node.title,node.x+8,node.y+3)}} onNodeClick={(n:any)=>setSelected(n)}/></div></>}
+      {tab === "graph" && <>
+        <div className="graph-toolbar"><div className="legend">{kinds.map(k=><button key={k} className={kindFilter===k?"selected":""} onClick={()=>setKindFilter(kindFilter===k?"all":k)}><i className={k}/>{k}</button>)}</div><p>Tap a node to open it. Labels appear only for the node you touch, keeping the map readable.</p></div>
+        <div className="graph-shell"><div className="graph"><Graph graphData={graphData} nodeAutoColorBy="kind" nodeLabel="title" linkLabel={(l:any)=>l.type} cooldownTicks={90} d3AlphaDecay={0.04} d3VelocityDecay={0.55} linkDirectionalArrowLength={2} linkWidth={0.6} nodeRelSize={6} onNodeHover={(n:any)=>setHovered(n?.id ?? null)} onNodeClick={(n:any)=>setSelected(n)} nodeCanvasObject={(node:any,ctx:any,scale:number)=>{const active=hovered===node.id||selected?.id===node.id;ctx.fillStyle=node.color;ctx.beginPath();ctx.arc(node.x,node.y,active?7:4.5,0,2*Math.PI);ctx.fill();if(active){ctx.font=`600 ${13/scale}px sans-serif`;ctx.fillStyle="#f4f6fb";ctx.fillText(node.title,node.x+10,node.y+4)}}}/></div><aside className="graph-guide"><h3>What this map means</h3><p>Each dot is one decision, goal, risk, task, company, pattern, or memory.</p><p>Lines show how those items relate.</p><div className="mini-list">{visible.slice(0,8).map(n=><button key={n.id} onClick={()=>setSelected(n)}><i className={n.kind}/><span>{n.title}</span></button>)}</div></aside></div>
+      </>}
     </section>
 
     {selected && <div className="shade" onClick={()=>setSelected(null)}><div className="drawer" onClick={e=>e.stopPropagation()}><button className="x" onClick={()=>setSelected(null)}>×</button><span className="pill">{selected.kind}</span><h2>{selected.title}</h2><p>{selected.body}</p><hr/><h3>Connected to</h3><div className="related">{related(selected.id).map(n=><button key={n.id} onClick={()=>setSelected(n)}>{n.title}<small>{n.kind}</small></button>)}</div><hr/><h3>Was this useful?</h3><div className="feedback"><button onClick={()=>addFeedback(selected.id,true)}><CheckCircle2/>Useful</button><button onClick={()=>addFeedback(selected.id,false)}><AlertTriangle/>Not useful</button></div></div></div>}
