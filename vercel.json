@@ -1,4 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm install --no-save playwright-core@1.62.1 @sparticuz/chromium@149.0.0 ffmpeg-static@5.2.0 ffprobe-static@3.1.0 && node scripts/vidger-showcase-recovery.mjs && npm run build"
+  "buildCommand": "npm install --no-save playwright-core@1.62.1 && node scripts/vidger-showcase-recovery.mjs && npm run build"
 }
