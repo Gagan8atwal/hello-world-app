@@ -15,11 +15,12 @@ concurrency:
 
 jobs:
   windows-gate:
-    name: Windows source gate
+    name: Windows source and build gate
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 30
     env:
       TARGET_SHA: ${{ github.sha }}
+      NEXT_TELEMETRY_DISABLED: "1"
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -33,10 +34,16 @@ jobs:
         shell: pwsh
         run: |
           $actual = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "git rev-parse failed with exit code $LASTEXITCODE"
+          }
           if ($actual -ne $env:TARGET_SHA) {
             throw "Expected $env:TARGET_SHA but checked out $actual"
           }
           $dirty = git status --porcelain
+          if ($LASTEXITCODE -ne 0) {
+            throw "git status failed with exit code $LASTEXITCODE"
+          }
           if ($dirty) {
             throw "Checkout is not clean: $dirty"
           }
@@ -50,21 +57,51 @@ jobs:
         shell: pwsh
         run: |
           node --version
-          npm --version
+          if ($LASTEXITCODE -ne 0) { throw "node --version failed with exit code $LASTEXITCODE" }
+          npm.cmd --version
+          if ($LASTEXITCODE -ne 0) { throw "npm.cmd --version failed with exit code $LASTEXITCODE" }
           git --version
+          if ($LASTEXITCODE -ne 0) { throw "git --version failed with exit code $LASTEXITCODE" }
+
+      - name: Record unlocked dependency limitation
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath package-lock.json) {
+            throw "Unexpected package-lock.json; review and switch this gate to npm ci before relying on it."
+          }
+          Write-Host "::notice::Dependency install is not reproducibly locked because this repository does not track a lockfile."
 
       - name: Install without lifecycle scripts
         shell: pwsh
-        run: npm install --ignore-scripts --package-lock=false --no-audit --no-fund
+        run: |
+          npm.cmd install --ignore-scripts --package-lock=false --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCODE" }
 
       - name: Type-check
         shell: pwsh
-        run: node node_modules/typescript/bin/tsc --noEmit
+        run: |
+          node node_modules/typescript/bin/tsc --noEmit
+          if ($LASTEXITCODE -ne 0) { throw "TypeScript validation failed with exit code $LASTEXITCODE" }
+
+      - name: Build application
+        shell: pwsh
+        run: |
+          npm.cmd run build
+          if ($LASTEXITCODE -ne 0) { throw "npm build failed with exit code $LASTEXITCODE" }
+          if (-not (Test-Path -LiteralPath .next/BUILD_ID -PathType Leaf)) {
+            throw "Next.js build did not produce .next/BUILD_ID"
+          }
+          if (-not (Test-Path -LiteralPath public/graph.json -PathType Leaf)) {
+            throw "Graph build did not produce public/graph.json"
+          }
 
       - name: Verify tracked source is unchanged
         shell: pwsh
         run: |
           $dirty = git status --porcelain --untracked-files=no
+          if ($LASTEXITCODE -ne 0) {
+            throw "git status failed with exit code $LASTEXITCODE"
+          }
           if ($dirty) {
             throw "Validation changed tracked source: $dirty"
           }
