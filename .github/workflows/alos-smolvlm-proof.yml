@@ -26,18 +26,28 @@ jobs:
     steps:
       - name: Checkout proof branch
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-      - name: Adapt temp permissions for hosted runner filesystem
+      - name: Adapt proof for hosted runner filesystem
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
           path = Path("alos-proof/smolvlm-proof.sh")
           source = path.read_text()
-          old = 'chmod 0700 "$SB/tmp/home" "$SB/tmp/cache"\nchown 65534:65534 "$SB/tmp/home" "$SB/tmp/cache"'
-          new = 'chmod 1777 "$SB/tmp/home" "$SB/tmp/cache"'
-          if old not in source:
-              raise SystemExit("expected hosted-runner permission block not found")
-          path.write_text(source.replace(old, new, 1))
+          replacements = [
+              (
+                  'chmod 0700 "$SB/tmp/home" "$SB/tmp/cache"\nchown 65534:65534 "$SB/tmp/home" "$SB/tmp/cache"',
+                  'chmod 1777 "$SB/tmp/home" "$SB/tmp/cache"',
+              ),
+              (
+                  "awk '/=> \\// { print $3 } /^\\\\// { print $1 }' \"$EVIDENCE/ldd.txt\" | sort -u |",
+                  "awk '/=> \\// { print $3 } $1 ~ /^\\\\// { print $1 }' \"$EVIDENCE/ldd.txt\" | sort -u |",
+              ),
+          ]
+          for old, new in replacements:
+              if old not in source:
+                  raise SystemExit(f"expected proof block not found: {old}")
+              source = source.replace(old, new, 1)
+          path.write_text(source)
           PY
       - name: Execute governed SmolVLM proof
         shell: bash
