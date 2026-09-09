@@ -1,0 +1,29 @@
+name: Render DB Cooper Longform
+on:
+  push:
+    branches: [main]
+    paths: ['viral-render/db-cooper-trigger.txt']
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install renderer dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core python3-pip
+      - name: Render documentary
+        run: |
+          chmod +x viral-render/render-db-cooper.sh
+          viral-render/render-db-cooper.sh
+      - name: Publish documentary
+        run: |
+          git config user.name 'ALOS Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/db-cooper-longform-sample-v1.mp4 renders/db-cooper-longform-sample-v1-contact.jpg renders/db-cooper-longform-sample-v1-sources.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Render D.B. Cooper long-form documentary sample [skip ci]'
+          git push
