@@ -33,20 +33,16 @@ jobs:
           from pathlib import Path
           path = Path("alos-proof/smolvlm-proof.sh")
           source = path.read_text()
-          replacements = [
-              (
-                  'chmod 0700 "$SB/tmp/home" "$SB/tmp/cache"\nchown 65534:65534 "$SB/tmp/home" "$SB/tmp/cache"',
-                  'chmod 1777 "$SB/tmp/home" "$SB/tmp/cache"',
-              ),
-              (
-                  "awk '/=> \\// { print $3 } /^\\\\// { print $1 }' \"$EVIDENCE/ldd.txt\" | sort -u |",
-                  "awk '/=> \\// { print $3 } $1 ~ /^\\\\// { print $1 }' \"$EVIDENCE/ldd.txt\" | sort -u |",
-              ),
-          ]
-          for old, new in replacements:
-              if old not in source:
-                  raise SystemExit(f"expected proof block not found: {old}")
-              source = source.replace(old, new, 1)
+          permission_old = 'chmod 0700 "$SB/tmp/home" "$SB/tmp/cache"\nchown 65534:65534 "$SB/tmp/home" "$SB/tmp/cache"'
+          permission_new = 'chmod 1777 "$SB/tmp/home" "$SB/tmp/cache"'
+          if source.count(permission_old) != 1:
+              raise SystemExit("expected hosted-runner permission block not found exactly once")
+          source = source.replace(permission_old, permission_new, 1)
+          loader_old = r" /^\// { print $1 }"
+          loader_new = r" $1 ~ /^\// { print $1 }"
+          if source.count(loader_old) != 1:
+              raise SystemExit("expected ELF-loader ldd parser block not found exactly once")
+          source = source.replace(loader_old, loader_new, 1)
           path.write_text(source)
           PY
       - name: Execute governed SmolVLM proof
