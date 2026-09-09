@@ -6,7 +6,7 @@ W=1280
 H=720
 FPS=24
 DUR=25
-mkdir -p viral-render/work/db renders
+mkdir -p viral-render/work/db/voice renders
 
 asset() {
   curl -L --fail --retry 3 "$1" -o "$2"
@@ -20,7 +20,8 @@ asset 'https://commons.wikimedia.org/wiki/Special:Redirect/file/DB-Cooper-age-pr
 asset 'https://commons.wikimedia.org/wiki/Special:Redirect/file/John%20Bartmann%20-%20broken-suspense-master.ogg' viral-render/work/db/music.ogg
 
 python3 -m pip install --quiet piper-tts
-piper --model en_US-ryan-high --output_file viral-render/work/db/narration.wav < viral-render/db-cooper-script.txt
+python3 -m piper.download_voices --data-dir viral-render/work/db/voice en_US-ryan-high
+python3 -m piper --data-dir viral-render/work/db/voice -m en_US-ryan-high -f viral-render/work/db/narration.wav -- "$(cat viral-render/db-cooper-script.txt)"
 ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 viral-render/work/db/narration.wav
 
 still_scene() {
