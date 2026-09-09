@@ -1,0 +1,72 @@
+name: Render Cat Door Viral Short
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'viral-render/door-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install renderer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+      - name: Fetch licensed source
+        run: |
+          mkdir -p viral-render/work renders
+          curl --fail --location --retry 3 \
+            'https://upload.wikimedia.org/wikipedia/commons/c/cc/Cat_opening_door.webm' \
+            -o viral-render/work/cat-door.webm
+          ffprobe -v error -show_entries stream=width,height \
+            -show_entries format=duration \
+            -of default=noprint_wrappers=1 viral-render/work/cat-door.webm
+      - name: Render meme short
+        run: |
+          FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          ffmpeg -y -i viral-render/work/cat-door.webm \
+            -filter_complex "[0:v]fps=30,scale=1080:1920,setsar=1,split=2[v1][v2];[v1]trim=start=0:end=22.15,setpts=PTS-STARTPTS,drawbox=x=55:y=80:w=970:h=155:color=black@0.60:t=fill:enable='between(t,0,6.2)',drawtext=fontfile=${FONT}:text='HE WATCHED US DO IT ONCE...':fontcolor=white:fontsize=51:borderw=2:bordercolor=black:x=(w-text_w)/2:y=125:enable='between(t,0,6.2)',drawbox=x=0:y=1645:w=1080:h=275:color=white@0.93:t=fill,drawtext=fontfile=${FONT}:text='BRO SAID\: I GOT IT FROM HERE':fontcolor=black:fontsize=52:x=(w-text_w)/2:y=1720,drawtext=fontfile=${FONT}:text='WAIT FOR THE HANDLE':fontcolor=black:fontsize=39:x=(w-text_w)/2:y=1800:enable='between(t,0,14.5)',drawtext=fontfile=${FONT}:text='NO PERMISSION NEEDED':fontcolor=black:fontsize=43:x=(w-text_w)/2:y=1800:enable='between(t,14.5,22.15)'[main];[v2]trim=start=15.0:end=22.15,setpts=(PTS-STARTPTS)/0.72,crop=900:1600:(1080-900)/2:(1920-1600)/2,scale=1080:1920,drawbox=x=355:y=80:w=370:h=135:color=black@0.68:t=fill,drawtext=fontfile=${FONT}:text='REPLAY':fontcolor=white:fontsize=60:borderw=2:bordercolor=black:x=(w-text_w)/2:y=112,drawbox=x=0:y=1645:w=1080:h=275:color=white@0.93:t=fill,drawtext=fontfile=${FONT}:text='HE REALLY OPENED IT':fontcolor=black:fontsize=56:x=(w-text_w)/2:y=1735[rep];[main][rep]concat=n=2:v=1:a=0[vout];[0:a]asplit=2[a1][a2];[a1]atrim=start=0:end=22.15,asetpts=PTS-STARTPTS[amain];[a2]atrim=start=15.0:end=22.15,asetpts=PTS-STARTPTS,atempo=0.72[arep];[amain][arep]concat=n=2:v=0:a=1[aout]" \
+            -map '[vout]' -map '[aout]' \
+            -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p \
+            -c:a aac -b:a 160k -ar 48000 -movflags +faststart \
+            renders/cat-opens-door-viral-001.mp4
+      - name: QA media contract
+        run: |
+          test -s renders/cat-opens-door-viral-001.mp4
+          ffprobe -v error -select_streams v:0 \
+            -show_entries stream=width,height,codec_name \
+            -show_entries format=duration,size \
+            -of default=noprint_wrappers=1 renders/cat-opens-door-viral-001.mp4
+          ffprobe -v error -select_streams a:0 \
+            -show_entries stream=codec_name,sample_rate \
+            -of default=noprint_wrappers=1 renders/cat-opens-door-viral-001.mp4
+      - name: Create QA frames and attribution
+        run: |
+          ffmpeg -y -i renders/cat-opens-door-viral-001.mp4 \
+            -vf "fps=0.20,scale=270:480,tile=3x2" \
+            -frames:v 1 -q:v 5 renders/cat-opens-door-viral-001-contact.jpg
+          cat > renders/cat-opens-door-viral-001-attribution.txt <<'EOF'
+          Source: Cat opening door.webm by Astropulse, Wikimedia Commons
+          Source page: https://commons.wikimedia.org/wiki/File:Cat_opening_door.webm
+          License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+          License URL: https://creativecommons.org/licenses/by-sa/4.0/
+          Changes: meme captions, timing treatment, vertical layout overlay, zoomed slow-motion replay, H.264/AAC transcode.
+          This derivative is distributed under CC BY-SA 4.0.
+          EOF
+      - name: Publish render
+        run: |
+          git config user.name 'ALOS Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/cat-opens-door-viral-001.mp4 \
+                  renders/cat-opens-door-viral-001-contact.jpg \
+                  renders/cat-opens-door-viral-001-attribution.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Render cat opens door viral short [skip ci]'
+          git push
