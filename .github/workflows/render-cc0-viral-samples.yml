@@ -1,0 +1,59 @@
+name: Render CC0 Viral Samples
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'viral-render/cc0-samples-trigger.txt'
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install renderer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          mkdir -p viral-render/work renders
+      - name: Download CC0 sources
+        run: |
+          curl --fail --location --retry 3 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Cat%20Jumpscare.webm' -o viral-render/work/jumpscare.webm
+          curl --fail --location --retry 3 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Cat%20chasing%20a%20pigeon.webm' -o viral-render/work/chase.webm
+          ffprobe -v error -show_entries format=duration -show_entries stream=width,height -of default=noprint_wrappers=1 viral-render/work/jumpscare.webm
+          ffprobe -v error -show_entries format=duration -show_entries stream=width,height -of default=noprint_wrappers=1 viral-render/work/chase.webm
+      - name: Render cat jumpscare meme
+        run: |
+          FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          ffmpeg -y -i viral-render/work/jumpscare.webm -filter_complex "[0:v]fps=30,scale=1080:-2,split=3[bg][fg][rep];[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:2[blur];[fg]scale=1080:-2[front];[blur][front]overlay=(W-w)/2:300,drawbox=x=40:y=90:w=1000:h=145:color=black@0.65:t=fill:enable='between(t,0,4.5)',drawtext=fontfile=${FONT}:text='WAIT FOR IT...':fontcolor=white:fontsize=66:x=(w-text_w)/2:y=125:enable='between(t,0,4.5)',drawbox=x=0:y=1500:w=1080:h=420:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='WHEN SOMEONE SAYS FREE FOOD':fontcolor=black:fontsize=53:x=(w-text_w)/2:y=1585,drawtext=fontfile=${FONT}:text='FROM THE OTHER ROOM':fontcolor=black:fontsize=49:x=(w-text_w)/2:y=1665[main];[rep]trim=start=6:end=10,setpts=(PTS-STARTPTS)/0.72,scale=1080:-2,format=gray,edgedetect=low=0.08:high=0.28,negate,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:white,drawbox=x=345:y=85:w=390:h=135:color=black@0.72:t=fill,drawtext=fontfile=${FONT}:text='REPLAY':fontcolor=white:fontsize=62:x=(w-text_w)/2:y=112,drawtext=fontfile=${FONT}:text='HE HEARD IT':fontcolor=black:fontsize=64:x=(w-text_w)/2:y=1690[sketch];[main][sketch]concat=n=2:v=1:a=0[v];[0:a]asplit=2[a1][a2];[a1]atrim=0:10,asetpts=PTS-STARTPTS[am];[a2]atrim=6:10,asetpts=PTS-STARTPTS,atempo=0.72[ar];[am][ar]concat=n=2:v=0:a=1[a]" -map '[v]' -map '[a]' -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -c:a aac -b:a 160k -movflags +faststart renders/viral-cat-jumpscare-cc0-v1.mp4
+      - name: Render cat chase meme
+        run: |
+          FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          DUR=$(ffprobe -v error -show_entries format=duration -of csv=p=0 viral-render/work/chase.webm)
+          END=$(python3 -c "d=float('$DUR'); print(min(d,18.0))")
+          START=$(python3 -c "e=float('$END'); print(max(0,e-5.0))")
+          ffmpeg -y -i viral-render/work/chase.webm -filter_complex "[0:v]fps=30,scale=1080:-2,split=3[bg][fg][rep];[bg]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,boxblur=30:2[blur];[fg]scale=1080:-2[front];[blur][front]overlay=(W-w)/2:300,drawbox=x=40:y=90:w=1000:h=145:color=black@0.65:t=fill:enable='between(t,0,5)',drawtext=fontfile=${FONT}:text='CONFIDENCE\: 100%':fontcolor=white:fontsize=61:x=(w-text_w)/2:y=125:enable='between(t,0,5)',drawbox=x=0:y=1500:w=1080:h=420:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='BRO HAD ONE JOB':fontcolor=black:fontsize=65:x=(w-text_w)/2:y=1605,drawtext=fontfile=${FONT}:text='THE PIGEON HAD OTHER PLANS':fontcolor=black:fontsize=43:x=(w-text_w)/2:y=1695[main];[rep]trim=start=${START}:end=${END},setpts=(PTS-STARTPTS)/0.76,scale=1080:-2,format=gray,edgedetect=low=0.08:high=0.28,negate,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:white,drawbox=x=345:y=85:w=390:h=135:color=black@0.72:t=fill,drawtext=fontfile=${FONT}:text='REPLAY':fontcolor=white:fontsize=62:x=(w-text_w)/2:y=112,drawtext=fontfile=${FONT}:text='SUCCESS\: 0%':fontcolor=black:fontsize=68:x=(w-text_w)/2:y=1690[sketch];[main]trim=0:${END},setpts=PTS-STARTPTS[m];[m][sketch]concat=n=2:v=1:a=0[v]" -map '[v]' -an -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -movflags +faststart renders/viral-cat-chase-cc0-v1.mp4
+      - name: Validate and create QA sheets
+        run: |
+          for f in renders/viral-cat-jumpscare-cc0-v1.mp4 renders/viral-cat-chase-cc0-v1.mp4; do
+            test -s "$f"
+            ffprobe -v error -show_entries stream=codec_name,width,height -show_entries format=duration,size -of default=noprint_wrappers=1 "$f"
+            base="${f%.mp4}"
+            ffmpeg -y -i "$f" -vf "fps=0.25,scale=270:480,tile=3x2" -frames:v 1 -q:v 5 "${base}-contact.jpg"
+          done
+          cat > renders/viral-cc0-source-record.txt <<'EOF'
+          Cat Jumpscare.webm — Wikimedia Commons — CC0 1.0 — creator Panini!
+          https://commons.wikimedia.org/wiki/File:Cat_Jumpscare.webm
+          Cat chasing a pigeon.webm — Wikimedia Commons — CC0 1.0 — creator Jeromi Mikhael
+          https://commons.wikimedia.org/wiki/File:Cat_chasing_a_pigeon.webm
+          Both source works are dedicated to the public domain via CC0 and may be modified and used commercially.
+          EOF
+      - name: Publish renders
+        run: |
+          git config user.name 'ALOS Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/viral-cat-jumpscare-cc0-v1.mp4 renders/viral-cat-jumpscare-cc0-v1-contact.jpg renders/viral-cat-chase-cc0-v1.mp4 renders/viral-cat-chase-cc0-v1-contact.jpg renders/viral-cc0-source-record.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Render two CC0 viral meme samples [skip ci]'
+          git push
