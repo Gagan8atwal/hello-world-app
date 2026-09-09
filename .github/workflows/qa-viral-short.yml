@@ -1,0 +1,34 @@
+name: QA Viral Short Frames
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'viral-render/qa-trigger.txt'
+
+permissions:
+  contents: write
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+      - name: Build visual QA contact sheet
+        run: |
+          ffmpeg -y -i renders/cat-play-meme-001.mp4 \
+            -vf "fps=0.55,scale=270:480:force_original_aspect_ratio=decrease,pad=270:480:(ow-iw)/2:(oh-ih)/2,tile=3x2" \
+            -frames:v 1 -q:v 4 renders/cat-play-meme-001-contact.jpg
+      - name: Commit QA sheet
+        run: |
+          git config user.name 'ALOS QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/cat-play-meme-001-contact.jpg
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add visual QA sheet for cat short [skip ci]'
+          git push
