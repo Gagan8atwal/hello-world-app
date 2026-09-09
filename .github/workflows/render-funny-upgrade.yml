@@ -27,18 +27,18 @@ jobs:
           FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
           ffmpeg -y -i viral-render/work/cat.webm -loop 1 -i viral-render/work/kid.jpg -i viral-render/work/laugh.ogg -i viral-render/work/boing.ogg \
           -filter_complex "
-          [0:v]fps=30,scale=1080:-2,split=4[c0][c1][c2][c3];
+          [0:v]fps=30,scale=1080:-2,split=3[c0][c1][c2];[1:v]split=2[k1][k2];[0:a]asplit=2[ca1][ca2];[2:a]asplit=2[la][lb];
           [c0]trim=0:6.6,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,drawbox=x=40:y=80:w=1000:h=150:color=black@0.68:t=fill,drawtext=fontfile=${FONT}:text='WHEN THE TREAT BAG OPENS...':fontcolor=white:fontsize=58:x=(w-text_w)/2:y=122,drawbox=x=0:y=1540:w=1080:h=380:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='BRO HEARD IT FROM ANOTHER DIMENSION':fontcolor=black:fontsize=43:x=(w-text_w)/2:y=1650[main];
           [c1]trim=5.8:6.55,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(zoom+0.01,1.35)':d=1:s=1080x1920:fps=30,drawbox=x=120:y=150:w=840:h=170:color=black@0.72:t=fill,drawtext=fontfile=${FONT}:text='BRO TELEPORTED':fontcolor=white:fontsize=75:x=(w-text_w)/2:y=195[freeze];
-          [1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(1.0+0.002*on,1.18)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30,trim=0:3,setpts=PTS-STARTPTS,drawbox=x=0:y=1460:w=1080:h=460:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='ME WATCHING THE REPLAY':fontcolor=black:fontsize=55:x=(w-text_w)/2:y=1600,drawtext=fontfile=${FONT}:text='AGAIN. AND AGAIN.':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1690[kid];
+          [k1]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(1.0+0.002*on,1.18)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30,trim=0:3,setpts=PTS-STARTPTS,drawbox=x=0:y=1460:w=1080:h=460:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='ME WATCHING THE REPLAY':fontcolor=black:fontsize=55:x=(w-text_w)/2:y=1600,drawtext=fontfile=${FONT}:text='AGAIN. AND AGAIN.':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1690[kid];
           [c2]trim=5.6:10.2,setpts=(PTS-STARTPTS)/0.72,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,format=gray,edgedetect=low=0.07:high=0.26,negate,drawbox=x=350:y=85:w=380:h=135:color=black@0.72:t=fill,drawtext=fontfile=${FONT}:text='REPLAY':fontcolor=white:fontsize=62:x=(w-text_w)/2:y=112,drawtext=fontfile=${FONT}:text='HE REALLY SAID ZOOM':fontcolor=black:fontsize=58:x=(w-text_w)/2:y=1710[sketch];
-          [1:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(1.05+0.003*on,1.22)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=60:s=1080x1920:fps=30,trim=0:2,setpts=PTS-STARTPTS,drawtext=fontfile=${FONT}:text='OKAY THAT GOT ME':fontcolor=white:fontsize=70:borderw=5:bordercolor=black:x=(w-text_w)/2:y=1500[kid2];
+          [k2]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(1.05+0.003*on,1.22)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=60:s=1080x1920:fps=30,trim=0:2,setpts=PTS-STARTPTS,drawtext=fontfile=${FONT}:text='OKAY THAT GOT ME':fontcolor=white:fontsize=70:borderw=5:bordercolor=black:x=(w-text_w)/2:y=1500[kid2];
           [main][freeze][kid][sketch][kid2]concat=n=5:v=1:a=0[v];
-          [0:a]atrim=0:6.6,asetpts=PTS-STARTPTS,volume=0.95[a0];
+          [ca1]atrim=0:6.6,asetpts=PTS-STARTPTS,volume=0.95[a0];
           [3:a]atrim=0:0.7,adelay=5850|5850,volume=1.7[bo];
-          [2:a]atrim=0:3,adelay=7350|7350,volume=1.2[la1];
-          [0:a]atrim=5.6:10.2,asetpts=PTS-STARTPTS,atempo=0.72,adelay=10350|10350,volume=0.8[arep];
-          [2:a]atrim=8:10,adelay=16750|16750,volume=1.25[la2];
+          [la]atrim=0:3,adelay=7350|7350,volume=1.2[la1];
+          [ca2]atrim=5.6:10.2,asetpts=PTS-STARTPTS,atempo=0.72,adelay=10350|10350,volume=0.8[arep];
+          [lb]atrim=8:10,adelay=16750|16750,volume=1.25[la2];
           [a0][bo][la1][arep][la2]amix=inputs=5:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]" \
           -map '[v]' -map '[a]' -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -c:a aac -b:a 160k -ar 48000 -movflags +faststart renders/funny-cat-jumpscare-upgrade-v2.mp4
       - name: QA and publish
