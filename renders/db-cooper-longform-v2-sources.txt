@@ -1,0 +1,24 @@
+FACT SOURCES
+FBI: D.B. Cooper Hijacking
+FBI: D.B. Cooper Plane Ticket
+FBI: 2016 investigation update
+
+PUBLIC-DOMAIN / REUSABLE VISUALS
+FBI composite sketch — U.S. federal government / public domain
+D.B. Cooper plane ticket — U.S. federal government / public domain
+Ransom money photo — U.S. federal government / public domain
+Wanted poster — U.S. federal government / public domain
+Age-progression image — U.S. federal government / public domain
+Richard McCoy Jr. image — FBI / public domain
+UDF Boeing 727 ground image — NASA / public domain
+B-727 vortex-study flight image — NASA / public domain
+D. B. Cooper jump.gif — derivative by Furfur of work by Anynobody — CC BY 2.5; attribution required
+
+MUSIC
+John Bartmann - broken-suspense-master.ogg — CC0 1.0
+
+NARRATION
+Original script from V1, locally synthesized with Piper en_US-ljspeech-high. Underlying LJSpeech dataset is public domain.
+
+V2 EDIT
+32 faster visual beats; 1920x1080; evidence board; animated routes; Boeing 727 visuals; jump reenactment; timed documentary subtitles; stronger opening; upgraded typography, motion and audio mix.
