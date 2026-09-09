@@ -26,4 +26,5 @@ jobs:
           git add renders/db-cooper-longform-sample-v1.mp4 renders/db-cooper-longform-sample-v1-contact.jpg renders/db-cooper-longform-sample-v1-sources.txt
           git diff --cached --quiet && exit 0
           git commit -m 'Render D.B. Cooper long-form documentary sample [skip ci]'
+          git pull --rebase origin main
           git push
