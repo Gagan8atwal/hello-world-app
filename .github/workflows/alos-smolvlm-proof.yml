@@ -1,0 +1,31 @@
+name: ALOS SmolVLM zero-cost proof
+
+on:
+  push:
+    branches:
+      - alos-local-ai-smolvlm-proof-20260909
+    paths:
+      - ".github/workflows/alos-smolvlm-proof.yml"
+      - "alos-proof/smolvlm-proof.sh"
+      - "vercel.json"
+
+permissions:
+  contents: read
+  attestations: read
+
+concurrency:
+  group: alos-smolvlm-proof-20260909
+  cancel-in-progress: true
+
+jobs:
+  real-smolvlm-inference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout proof branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Execute governed SmolVLM proof
+        shell: bash
+        run: bash alos-proof/smolvlm-proof.sh

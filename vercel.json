@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "alos-local-ai-smolvlm-proof-20260909": false
+    }
+  }
+}
