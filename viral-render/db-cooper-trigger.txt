@@ -1,1 +1,1 @@
-render db cooper longform v1 retry 2
+render db cooper longform v1 retry 3 public-domain voice
