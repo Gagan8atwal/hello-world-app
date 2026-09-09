@@ -1,0 +1,32 @@
+name: Render DB Cooper V2
+on:
+  push:
+    branches: [main]
+    paths: ['viral-render/db-cooper-v2-trigger.txt']
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install renderer dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core python3-pip
+      - name: Render enhanced documentary
+        run: |
+          chmod +x viral-render/render-db-cooper-v2.sh
+          bash viral-render/render-db-cooper-v2.sh
+      - name: Publish V2 outputs
+        run: |
+          git config user.name 'ALOS Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/db-cooper-longform-v2.mp4 renders/db-cooper-longform-v2.srt renders/db-cooper-longform-v2-contact.jpg renders/db-cooper-longform-v2-sources.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Render enhanced D.B. Cooper V2 documentary [skip ci]'
+          git reset --hard HEAD
+          git clean -fd viral-render/work || true
+          git pull --rebase origin main
+          git push
