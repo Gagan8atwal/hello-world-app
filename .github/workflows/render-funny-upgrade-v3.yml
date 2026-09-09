@@ -1,0 +1,62 @@
+name: Render Funny Upgrade V3
+on:
+  push:
+    branches: [main]
+    paths: ['viral-render/funny-upgrade-v3-trigger.txt']
+permissions:
+  contents: write
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          mkdir -p viral-render/work renders
+      - name: Download reusable sources
+        run: |
+          curl -L --fail --retry 3 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Cat%20Jumpscare.webm' -o viral-render/work/cat.webm
+          curl -L --fail --retry 3 'https://videos.pexels.com/video-files/6970273/6970273-uhd_4096_2160_25fps.mp4' -o viral-render/work/laughing-child.mp4
+          curl -L --fail --retry 3 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Four%20Years%20Old%20child%20laughing.ogg' -o viral-render/work/kid-laugh.ogg
+          curl -L --fail --retry 3 'https://commons.wikimedia.org/wiki/Special:Redirect/file/Nl-boing.ogg' -o viral-render/work/boing.ogg
+      - name: Build reaction-meme edit
+        run: |
+          FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          ffmpeg -y -i viral-render/work/cat.webm -i viral-render/work/laughing-child.mp4 -i viral-render/work/kid-laugh.ogg -i viral-render/work/boing.ogg \
+          -filter_complex "
+          [0:v]fps=30,split=3[c0][c1][c2];[1:v]fps=30,split=2[k0][k1];[0:a]asplit=2[ca0][ca1];[2:a]asplit=2[kl0][kl1];
+          [c0]trim=0:6.6,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,drawbox=x=35:y=75:w=1010:h=155:color=black@0.70:t=fill,drawtext=fontfile=${FONT}:text='WHEN THE TREAT BAG OPENS...':fontcolor=white:fontsize=58:x=(w-text_w)/2:y=120,drawbox=x=0:y=1520:w=1080:h=400:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='BRO HEARD IT FROM ANOTHER DIMENSION':fontcolor=black:fontsize=43:x=(w-text_w)/2:y=1630,drawtext=fontfile=${FONT}:text='WATCH HIS ENTRANCE':fontcolor=black:fontsize=39:x=(w-text_w)/2:y=1725[main];
+          [c1]trim=5.72:6.55,setpts=(PTS-STARTPTS)/0.62,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(1.0+0.012*on,1.48)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,drawbox=x=105:y=150:w=870:h=180:color=black@0.75:t=fill,drawtext=fontfile=${FONT}:text='BRO TELEPORTED':fontcolor=white:fontsize=78:x=(w-text_w)/2:y=202[impact];
+          [k0]trim=0.4:3.7,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,drawbox=x=0:y=1470:w=1080:h=450:color=white@0.94:t=fill,drawtext=fontfile=${FONT}:text='ME AFTER SEEING THAT':fontcolor=black:fontsize=61:x=(w-text_w)/2:y=1585,drawtext=fontfile=${FONT}:text='FOR THE 6TH TIME':fontcolor=black:fontsize=60:x=(w-text_w)/2:y=1680[kid];
+          [c2]trim=5.3:10.2,setpts=(PTS-STARTPTS)/0.70,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,format=gray,edgedetect=low=0.07:high=0.26,negate,drawbox=x=335:y=80:w=410:h=140:color=black@0.75:t=fill,drawtext=fontfile=${FONT}:text='CSI REPLAY':fontcolor=white:fontsize=57:x=(w-text_w)/2:y=118,drawtext=fontfile=${FONT}:text='ENHANCE THE ZOOM':fontcolor=black:fontsize=56:x=(w-text_w)/2:y=1705[sketch];
+          [k1]trim=3.7:6.2,setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,zoompan=z='min(1.0+0.004*on,1.20)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=1080x1920:fps=30,drawbox=x=0:y=1510:w=1080:h=410:color=black@0.64:t=fill,drawtext=fontfile=${FONT}:text='OKAY STOP REPLAYING IT':fontcolor=white:fontsize=53:x=(w-text_w)/2:y=1635,drawtext=fontfile=${FONT}:text='...ONE MORE TIME':fontcolor=white:fontsize=59:x=(w-text_w)/2:y=1720[kid2];
+          [main][impact][kid][sketch][kid2]concat=n=5:v=1:a=0[v];
+          [ca0]atrim=0:6.6,asetpts=PTS-STARTPTS,volume=1.0[a0];
+          [3:a]atrim=0:0.8,adelay=5650|5650,volume=1.8[bo];
+          [kl0]atrim=0:3.3,adelay=7950|7950,volume=1.45[la1];
+          [ca1]atrim=5.3:10.2,asetpts=PTS-STARTPTS,atempo=0.70,adelay=11250|11250,volume=0.70[rep];
+          [kl1]atrim=4:6.5,adelay=18250|18250,volume=1.50[la2];
+          [a0][bo][la1][rep][la2]amix=inputs=5:duration=longest:dropout_transition=0,alimiter=limit=0.95[a]" \
+          -map '[v]' -map '[a]' -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -c:a aac -b:a 160k -ar 48000 -movflags +faststart renders/funny-cat-jumpscare-moving-kid-v3.mp4
+      - name: QA and publish
+        run: |
+          test -s renders/funny-cat-jumpscare-moving-kid-v3.mp4
+          ffprobe -v error -show_entries stream=codec_name,width,height -show_entries format=duration,size -of default=noprint_wrappers=1 renders/funny-cat-jumpscare-moving-kid-v3.mp4
+          ffmpeg -y -i renders/funny-cat-jumpscare-moving-kid-v3.mp4 -vf "fps=0.35,scale=270:480,tile=4x2" -frames:v 1 -q:v 5 renders/funny-cat-jumpscare-moving-kid-v3-contact.jpg
+          cat > renders/funny-cat-jumpscare-moving-kid-v3-sources.txt <<'EOF'
+          Cat Jumpscare.webm — CC0 1.0 — Wikimedia Commons — creator Panini!
+          Pexels video 6970273 — "A Child Having Fun and Laughing" — cottonbro studio — free to use and modify under the Pexels License.
+          Four Years Old child laughing.ogg — morgantj — CC BY 3.0 — Wikimedia Commons/Freesound. Attribution: morgantj.
+          Nl-boing.ogg — CC0 1.0 — Wikimedia Commons — creator Marcel coenders.
+          Edit: original captions, impact zoom, moving child reaction, kid laughter, slow sketch replay, callback reaction, layered sound design.
+          EOF
+          git config user.name 'ALOS Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/funny-cat-jumpscare-moving-kid-v3*
+          git diff --cached --quiet && exit 0
+          git commit -m 'Render moving-kid funny short v3 [skip ci]'
+          git pull --rebase origin main
+          git push
