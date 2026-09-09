@@ -1,0 +1,24 @@
+name: Export Cat QA Base64
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'viral-render/export-qa-trigger.txt'
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Encode QA image
+        run: |
+          base64 -w 0 renders/cat-opens-door-viral-001-contact.jpg > renders/cat-opens-door-viral-001-contact.b64
+      - name: Commit text export
+        run: |
+          git config user.name 'ALOS QA Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/cat-opens-door-viral-001-contact.b64
+          git diff --cached --quiet && exit 0
+          git commit -m 'Export cat QA contact sheet as base64 [skip ci]'
+          git push
