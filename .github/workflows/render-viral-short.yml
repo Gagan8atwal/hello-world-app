@@ -1,0 +1,69 @@
+name: Render Viral Short
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'viral-render/trigger.txt'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install renderer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+
+      - name: Fetch rights-cleared source
+        run: |
+          mkdir -p viral-render/work renders
+          curl --fail --location --retry 3 \
+            'https://upload.wikimedia.org/wikipedia/commons/f/f9/Cat_Plays.webm' \
+            -o viral-render/work/source.webm
+          ffprobe -v error -show_entries format=duration \
+            -of default=noprint_wrappers=1:nokey=1 viral-render/work/source.webm
+
+      - name: Render vertical meme edit
+        run: |
+          FONT='/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+          ffmpeg -y -i viral-render/work/source.webm \
+            -filter_complex "[0:v]fps=30,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,split=2[v1][v2];[v1]trim=start=0:end=8.25,setpts=PTS-STARTPTS,drawbox=x=45:y=90:w=990:h=150:color=black@0.58:t=fill:enable='between(t,0,3.2)',drawtext=fontfile=${FONT}:text='WAIT FOR IT...':fontcolor=white:fontsize=64:borderw=3:bordercolor=black:x=(w-text_w)/2:y=125:enable='between(t,0,3.2)',drawbox=x=45:y=1580:w=990:h=190:color=black@0.62:t=fill:enable='between(t,3.2,8.25)',drawtext=fontfile=${FONT}:text='WHEN THE ZOOMIES HIT':fontcolor=white:fontsize=58:borderw=3:bordercolor=black:x=(w-text_w)/2:y=1635:enable='between(t,3.2,8.25)'[main];[v2]trim=start=6.15:end=8.25,setpts=(PTS-STARTPTS)/0.70,crop=900:1600:(1080-900)/2:(1920-1600)/2,scale=1080:1920,drawbox=x=365:y=90:w=350:h=125:color=black@0.64:t=fill,drawtext=fontfile=${FONT}:text='REPLAY':fontcolor=white:fontsize=58:borderw=3:bordercolor=black:x=(w-text_w)/2:y=118[rep];[main][rep]concat=n=2:v=1:a=0[vout];[0:a]asplit=2[a1][a2];[a1]atrim=start=0:end=8.25,asetpts=PTS-STARTPTS[amain];[a2]atrim=start=6.15:end=8.25,asetpts=PTS-STARTPTS,atempo=0.70[arep];[amain][arep]concat=n=2:v=0:a=1[aout]" \
+            -map '[vout]' -map '[aout]' \
+            -c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p \
+            -c:a aac -b:a 160k -ar 48000 -movflags +faststart \
+            renders/cat-play-meme-001.mp4
+
+      - name: Validate output
+        run: |
+          test -s renders/cat-play-meme-001.mp4
+          ffprobe -v error -select_streams v:0 \
+            -show_entries stream=width,height,duration \
+            -of default=noprint_wrappers=1 renders/cat-play-meme-001.mp4
+
+      - name: Write attribution
+        run: |
+          cat > renders/cat-play-meme-001-attribution.txt <<'EOF'
+          Source: Cat Plays.webm by Riverarvi, Wikimedia Commons
+          Source page: https://commons.wikimedia.org/wiki/File:Cat_Plays.webm
+          License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+          License: https://creativecommons.org/licenses/by-sa/4.0/
+          Changes: reframed to vertical short format; text overlays; timing edit; zoomed slow-motion replay; H.264/AAC transcode.
+          This derivative is distributed under CC BY-SA 4.0.
+          EOF
+
+      - name: Publish rendered file to repository
+        run: |
+          git config user.name 'ALOS Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add renders/cat-play-meme-001.mp4 renders/cat-play-meme-001-attribution.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Render rights-cleared cat meme short [skip ci]'
+          git push
