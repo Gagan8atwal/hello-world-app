@@ -1,1 +1,1 @@
-render db cooper longform v1 retry 3 public-domain voice
+render db cooper longform final public-domain voice publish fix
