@@ -20,8 +20,8 @@ asset 'https://commons.wikimedia.org/wiki/Special:Redirect/file/DB-Cooper-age-pr
 asset 'https://commons.wikimedia.org/wiki/Special:Redirect/file/John%20Bartmann%20-%20broken-suspense-master.ogg' viral-render/work/db/music.ogg
 
 python3 -m pip install --quiet piper-tts
-python3 -m piper.download_voices --data-dir viral-render/work/db/voice en_US-ryan-high
-python3 -m piper --data-dir viral-render/work/db/voice -m en_US-ryan-high -f viral-render/work/db/narration.wav -- "$(cat viral-render/db-cooper-script.txt)"
+python3 -m piper.download_voices --data-dir viral-render/work/db/voice en_US-ljspeech-high
+python3 -m piper --data-dir viral-render/work/db/voice -m en_US-ljspeech-high -f viral-render/work/db/narration.wav -- "$(cat viral-render/db-cooper-script.txt)"
 ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1 viral-render/work/db/narration.wav
 
 still_scene() {
@@ -94,7 +94,7 @@ MUSIC
 John Bartmann - broken-suspense-master.ogg — CC0 1.0 — Wikimedia Commons
 
 NARRATION
-Locally synthesized with open-source Piper TTS using the en_US-ryan-high model.
+Locally synthesized with open-source Piper TTS using the en_US-ljspeech-high model. The underlying LJSpeech dataset is public domain.
 
 EDIT
 Original script, animated route graphics, typography, timeline cards, Ken Burns motion, sound mix and assembly by the ALOS video pipeline.
