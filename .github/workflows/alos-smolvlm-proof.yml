@@ -44,10 +44,7 @@ jobs:
               raise SystemExit("expected ELF-loader ldd parser block not found exactly once")
           source = source.replace(loader_old, loader_new, 1)
           executable_old = 'chmod 0555 "$SB/runtime/llama-mtmd-cli"'
-          executable_new = '''chmod 0555 "$SB/runtime/llama-mtmd-cli"
-for libroot in "$SB/lib" "$SB/lib64" "$SB/usr/lib"; do
-  test ! -d "$libroot" || find "$libroot" -xdev -type f -exec chmod 0555 {} +
-done'''
+          executable_new = 'chmod 0555 "$SB/runtime/llama-mtmd-cli"\nfor libroot in "$SB/lib" "$SB/lib64" "$SB/usr/lib"; do\n  test ! -d "$libroot" || find "$libroot" -xdev -type f -exec chmod 0555 {} +\ndone'
           if source.count(executable_old) != 1:
               raise SystemExit("expected runtime executable permission block not found exactly once")
           source = source.replace(executable_old, executable_new, 1)
