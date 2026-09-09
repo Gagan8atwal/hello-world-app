@@ -18,6 +18,7 @@ jobs:
       - name: Render enhanced documentary
         run: |
           chmod +x viral-render/render-db-cooper-v2.sh
+          sed -i 's/d=\./d=0./g' viral-render/render-db-cooper-v2.sh
           bash viral-render/render-db-cooper-v2.sh
       - name: Publish V2 outputs
         run: |
