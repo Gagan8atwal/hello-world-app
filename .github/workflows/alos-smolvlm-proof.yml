@@ -43,6 +43,11 @@ jobs:
           if source.count(loader_old) != 1:
               raise SystemExit("expected ELF-loader ldd parser block not found exactly once")
           source = source.replace(loader_old, loader_new, 1)
+          backend_old = 'find "$CLI_DIR" -maxdepth 1 \\( -type f -o -type l \\) -name '\''*.so*'\'' -print0 |'
+          backend_new = 'find "$EXTRACT" \\( -type f -o -type l \\) -name '\''*.so*'\'' -print0 |'
+          if source.count(backend_old) != 1:
+              raise SystemExit("expected llama backend copy block not found exactly once")
+          source = source.replace(backend_old, backend_new, 1)
           executable_old = 'chmod 0555 "$SB/runtime/llama-mtmd-cli"'
           executable_new = 'chmod 0555 "$SB/runtime/llama-mtmd-cli"\nfor libroot in "$SB/lib" "$SB/lib64" "$SB/usr/lib"; do\n  test ! -d "$libroot" || find "$libroot" -xdev -type f -exec chmod 0555 {} +\ndone'
           if source.count(executable_old) != 1:
