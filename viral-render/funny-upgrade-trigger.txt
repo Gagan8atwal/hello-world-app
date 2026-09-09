@@ -1,1 +1,1 @@
-render funny upgrade v2
+render funny upgrade v2 retry 1
