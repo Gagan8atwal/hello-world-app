@@ -58,4 +58,5 @@ jobs:
           git add renders/funny-cat-jumpscare-upgrade-v2*
           git diff --cached --quiet && exit 0
           git commit -m 'Render upgraded funny short [skip ci]'
+          git pull --rebase origin main
           git push
