@@ -1,0 +1,20 @@
+FACT SOURCES
+FBI: D.B. Cooper Hijacking — https://www.fbi.gov/history/cases-and-criminals/db-cooper-hijacking
+FBI: D.B. Cooper Plane Ticket — https://www.fbi.gov/history/artifacts/d-b-cooper-plane-ticket
+FBI: 2016 investigation update — https://www.fbi.gov/contact-us/field-offices/seattle/news/press-releases/update-on-investigation-of-1971-hijacking-by-d.b.-cooper
+
+VISUALS — PUBLIC DOMAIN, U.S. FEDERAL GOVERNMENT
+FBI-CompositeB-DBCooper.jpg — Wikimedia Commons
+July 2016 D.B. Cooper Plane Ticket (28379315406).jpg — Wikimedia Commons
+Money stolen by D. B. Cooper.jpg — Wikimedia Commons
+DB Cooper Wanted Poster.jpg — Wikimedia Commons
+DB-Cooper-age-progress.jpg — Wikimedia Commons
+
+MUSIC
+John Bartmann - broken-suspense-master.ogg — CC0 1.0 — Wikimedia Commons
+
+NARRATION
+Locally synthesized with open-source Piper TTS using the en_US-ljspeech-high model. The underlying LJSpeech dataset is public domain.
+
+EDIT
+Original script, animated route graphics, typography, timeline cards, Ken Burns motion, sound mix and assembly by the ALOS video pipeline.
