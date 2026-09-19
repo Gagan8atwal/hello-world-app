@@ -1,0 +1,2 @@
+import test from "node:test"; import assert from "node:assert/strict"; import {ALOS_PROJECT,ALOS_REPOSITORY,buildAlosProjectBrowserAdmission} from "./shared-agent-browser-integration.mjs";
+test("TV Lounge owner admission is source-bound and zero-key",()=>{const a=buildAlosProjectBrowserAdmission({sourceCommit:"a".repeat(40),taskId:"task-tv",correlationId:"corr-tv"});assert.equal(a.project,ALOS_PROJECT);assert.equal(a.repository,ALOS_REPOSITORY);assert.equal(a.inference.providerCredentialRequired,false);assert.equal(a.permitsReplacementBrowser,false);});
