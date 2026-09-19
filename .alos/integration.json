@@ -1,0 +1,57 @@
+{
+  "schema": "alos.project-integration.v1",
+  "projectKey": "tv-lounge",
+  "projectName": "TV Lounge",
+  "repository": "Gagan8atwal/hello-world-app",
+  "branch": "world-tv-static",
+  "controlPlaneRepository": "Gagan8atwal/al-solutions-command-center",
+  "inference": {
+    "mode": "deterministic-zero-key",
+    "provider": null,
+    "model": null,
+    "providerCredentialRequired": false,
+    "externalModelCalls": 0,
+    "maxPaidCostUsd": 0
+  },
+  "route": [
+    "canonical-project-owner",
+    "server-owned-deterministic-agent",
+    "runAgent",
+    "AlosToolExecutor",
+    "persisted-permission-Orchestrator",
+    "existing-owner-ALOS-Browser",
+    "raw-verifier-evidence",
+    "same-project-owner-consumer"
+  ],
+  "requiredTools": [
+    "browser.read",
+    "browser.interact"
+  ],
+  "browser": {
+    "ownerSha256": "b69fd7c0d1d0a552ab256340991e16055d7ed397973148ecadbe6d8e5af3f269",
+    "requireNonRoot": true,
+    "requireNoNewPrivs": true,
+    "forbidSandboxOverride": true,
+    "managedPolicyMustRemainUnchanged": true
+  },
+  "acceptance": {
+    "requireTwoDisjointRuns": true,
+    "requireCorrelatedEvidence": true,
+    "requireRetryOrReopenProof": true,
+    "requireZeroDuplicateSideEffects": true,
+    "failClosedOnWrongProject": true,
+    "failClosedOnPermissionDenial": true
+  },
+  "forbidden": [
+    "vercel",
+    "railway",
+    "workstation",
+    "remote-desktop",
+    "opera",
+    "github-hosted-ci",
+    "paid-model-fallback",
+    "replacement-browser",
+    "replacement-router"
+  ],
+  "consumerPath": ".alos/zero-key-consumer.mjs"
+}
