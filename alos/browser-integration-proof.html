@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>On Alert ALOS Integration Proof</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:32px;background:#fff;color:#111}
+main{max-width:760px;margin:auto}button{font:inherit;padding:12px 18px;margin-right:8px}#status{font-weight:700}
+</style>
+</head>
+<body>
+<main data-alos-project="on-alert-media" data-source-repository="Gagan8atwal/hello-world-app">
+<h1>On Alert / DOX — ALOS Agent/Browser Integration</h1>
+<p>Side-effect-free documentary pipeline acceptance fixture. It does not publish, upload, delete, or modify channel content.</p>
+<button id="verify" type="button">Verify documentary pipeline</button>
+<button id="inspect" type="button">Inspect release safety</button>
+<p id="status" aria-live="polite">READY</p>
+<script>
+const status=document.getElementById("status");
+document.getElementById("verify").addEventListener("click",()=>{status.textContent="PIPELINE:VERIFIED";});
+document.getElementById("inspect").addEventListener("click",()=>{status.textContent="RELEASE:SAFE";});
+</script>
+</main>
+</body>
+</html>
