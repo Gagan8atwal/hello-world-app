@@ -1,0 +1,51 @@
+{
+  "schema": "alos.browser-e2e-spec.v1",
+  "projectKey": "on-alert-media",
+  "runner": "Gagan8atwal/al-solutions-command-center:alos/runtime/project-browser-acceptance.ts",
+  "sideEffects": "forbidden",
+  "acceptance": {
+    "requireTwoDisjointSessions": true,
+    "requireCorrelatedEvidenceEveryAction": true,
+    "requireExactPinnedSource": true,
+    "requireSameOwnerConsumption": true,
+    "maxPaidCostUsd": 0
+  },
+  "journeys": [
+    {
+      "label": "mobile-documentary-pipeline-proof",
+      "width": 390,
+      "height": 844,
+      "startPagePath": "/",
+      "expectText": "On Alert / DOX — ALOS Agent/Browser Integration",
+      "steps": [
+        {
+          "type": "click",
+          "match": "Verify documentary pipeline",
+          "expectText": "PIPELINE:VERIFIED"
+        },
+        {
+          "type": "snapshot",
+          "expectText": "does not publish"
+        }
+      ]
+    },
+    {
+      "label": "desktop-release-safety-proof",
+      "width": 1440,
+      "height": 900,
+      "startPagePath": "/",
+      "expectText": "Side-effect-free documentary pipeline acceptance fixture",
+      "steps": [
+        {
+          "type": "click",
+          "match": "Inspect release safety",
+          "expectText": "RELEASE:SAFE"
+        },
+        {
+          "type": "snapshot",
+          "expectText": "RELEASE:SAFE"
+        }
+      ]
+    }
+  ]
+}
