@@ -1,0 +1,51 @@
+{
+  "schema": "alos.browser-e2e-spec.v1",
+  "projectKey": "tv-lounge",
+  "runner": "Gagan8atwal/al-solutions-command-center:alos/runtime/project-browser-acceptance.ts",
+  "sideEffects": "forbidden",
+  "acceptance": {
+    "requireTwoDisjointSessions": true,
+    "requireCorrelatedEvidenceEveryAction": true,
+    "requireExactPinnedSource": true,
+    "requireSameOwnerConsumption": true,
+    "maxPaidCostUsd": 0
+  },
+  "journeys": [
+    {
+      "label": "mobile-player-shell-proof",
+      "width": 390,
+      "height": 844,
+      "startPagePath": "/",
+      "expectText": "TV Lounge — ALOS Agent/Browser Integration",
+      "steps": [
+        {
+          "type": "click",
+          "match": "Verify player shell",
+          "expectText": "PLAYER:VERIFIED"
+        },
+        {
+          "type": "snapshot",
+          "expectText": "does not modify channel catalogs"
+        }
+      ]
+    },
+    {
+      "label": "desktop-catalog-safety-proof",
+      "width": 1440,
+      "height": 900,
+      "startPagePath": "/",
+      "expectText": "Side-effect-free player acceptance fixture",
+      "steps": [
+        {
+          "type": "click",
+          "match": "Inspect catalog safety",
+          "expectText": "CATALOG:SAFE"
+        },
+        {
+          "type": "snapshot",
+          "expectText": "CATALOG:SAFE"
+        }
+      ]
+    }
+  ]
+}
