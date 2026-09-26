@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TV Lounge ALOS Integration Proof</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:32px;background:#fff;color:#111}
+main{max-width:760px;margin:auto}button{font:inherit;padding:12px 18px;margin-right:8px}#status{font-weight:700}
+</style>
+</head>
+<body>
+<main data-alos-project="tv-lounge" data-source-repository="Gagan8atwal/hello-world-app">
+<h1>TV Lounge — ALOS Agent/Browser Integration</h1>
+<p>Side-effect-free player acceptance fixture. It does not modify channel catalogs, publish content, or contact third-party streams.</p>
+<button id="verify" type="button">Verify player shell</button>
+<button id="inspect" type="button">Inspect catalog safety</button>
+<p id="status" aria-live="polite">READY</p>
+<script>
+const status=document.getElementById("status");
+document.getElementById("verify").addEventListener("click",()=>{status.textContent="PLAYER:VERIFIED";});
+document.getElementById("inspect").addEventListener("click",()=>{status.textContent="CATALOG:SAFE";});
+</script>
+</main>
+</body>
+</html>
