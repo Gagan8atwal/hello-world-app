@@ -16,7 +16,7 @@
   "route": [
     "canonical-project-owner",
     "server-owned-deterministic-agent",
-    "runAgent",
+    "runAgent-internal-deterministic-browser-planner",
     "AlosToolExecutor",
     "persisted-permission-Orchestrator",
     "existing-owner-ALOS-Browser",
@@ -28,11 +28,11 @@
     "browser.interact"
   ],
   "browser": {
-    "ownerSha256": "b69fd7c0d1d0a552ab256340991e16055d7ed397973148ecadbe6d8e5af3f269",
+    "ownerSha256": "822cc19669d7d1000063e6a380bb73e1d91440f5067eae44d110a4df061b4159",
     "requireNonRoot": true,
     "requireNoNewPrivs": true,
     "forbidSandboxOverride": true,
-    "managedPolicyMustRemainUnchanged": true
+    "requirePinnedOwnerModuleHash": true
   },
   "acceptance": {
     "requireTwoDisjointRuns": true,
@@ -40,7 +40,15 @@
     "requireRetryOrReopenProof": true,
     "requireZeroDuplicateSideEffects": true,
     "failClosedOnWrongProject": true,
-    "failClosedOnPermissionDenial": true
+    "failClosedOnPermissionDenial": true,
+    "requireExactlyTwoPersistedRuns": true,
+    "requireTwoDisjointSessionsPerRun": true,
+    "requireProducedByExecutionActionCorrelation": true,
+    "requireExactSourceRef": true,
+    "requireExactSourceRevision": true,
+    "requireExactToolSet": true,
+    "forbidExternalInferenceInDeterministicRunAgent": true,
+    "failClosedOnStaleSource": true
   },
   "forbidden": [
     "vercel",
