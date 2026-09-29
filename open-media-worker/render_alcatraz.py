@@ -172,6 +172,53 @@ def make_broll_clip(video:Path,out:Path,duration:float,start:float):
          "-t",f"{duration:.3f}","-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},eq=contrast=1.05:saturation=.92:brightness=-.01,fps={FPS},format=yuv420p",
          "-an","-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",str(out)],timeout=900)
 
+def make_hook_clip(video:Path,out:Path,duration:float):
+    raw=TMP/"hook-raw.mp4"
+    run([FFMPEG,"-hide_banner","-loglevel","error","-y","-ss","0","-i",str(video),
+         "-t",f"{duration:.3f}","-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},eq=contrast=1.10:saturation=.86:brightness=-.035,fps={FPS},format=yuv420p",
+         "-an","-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",str(raw)],timeout=900)
+    proc=subprocess.Popen([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(raw),
+        "-f","rawvideo","-pix_fmt","rgb24","-"],stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    frames=max(1,round(duration*FPS))
+    def frame(n,t):
+        size=W*H*3
+        data=proc.stdout.read(size)
+        if len(data)!=size: raise RuntimeError("hook decode ended early")
+        im=Image.frombytes("RGB",(W,H),data).convert("RGBA");d=ImageDraw.Draw(im,"RGBA")
+        # dark cinematic lower gradient
+        for y in range(H-390,H,6):
+            a=int(215*((y-(H-390))/390)**1.35)
+            d.rectangle((0,y,W,y+6),fill=(0,0,0,a))
+        reveal=clamp(t/.34)
+        if reveal>.02:
+            d.rounded_rectangle((58,55,412,112),radius=12,fill=(0,0,0,180))
+            d.text((78,67),"ALCATRAZ • JUNE 1962",font=font(24,True),fill=(238,191,111,255))
+            d.text((72,H-300),"THE ESCAPE THAT",font=font(66,True),fill=(255,255,255,int(255*reveal)))
+            d.text((72,H-222),"SHOULDN'T HAVE WORKED",font=font(66,True),fill=(255,255,255,int(255*reveal)))
+            d.text((77,H-128),"Three men vanished into San Francisco Bay. Their fate is still unresolved.",font=font(27),fill=(213,224,229,245))
+        return im.convert("RGB")
+    # Re-decode with frame writer so timing remains exact.
+    proc.kill()
+    rawpipe=subprocess.Popen([FFMPEG,"-hide_banner","-loglevel","error","-i",str(raw),"-f","rawvideo","-pix_fmt","rgb24","-"],stdout=subprocess.PIPE)
+    enc=subprocess.Popen([FFMPEG,"-hide_banner","-loglevel","error","-y","-f","rawvideo","-pix_fmt","rgb24","-s",f"{W}x{H}","-r",str(FPS),"-i","pipe:0","-an","-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",str(out)],stdin=subprocess.PIPE)
+    for n in range(frames):
+        data=rawpipe.stdout.read(W*H*3)
+        if len(data)!=W*H*3: raise RuntimeError("hook raw decode ended early")
+        im=Image.frombytes("RGB",(W,H),data).convert("RGBA");d=ImageDraw.Draw(im,"RGBA")
+        t=n/max(1,frames-1);reveal=clamp(t/.34)
+        for y in range(H-390,H,6):
+            a=int(215*((y-(H-390))/390)**1.35)
+            d.rectangle((0,y,W,y+6),fill=(0,0,0,a))
+        d.rounded_rectangle((58,55,412,112),radius=12,fill=(0,0,0,180))
+        d.text((78,67),"ALCATRAZ • JUNE 1962",font=font(24,True),fill=(238,191,111,255))
+        d.text((72,H-300),"THE ESCAPE THAT",font=font(66,True),fill=(255,255,255,int(255*reveal)))
+        d.text((72,H-222),"SHOULDN'T HAVE WORKED",font=font(66,True),fill=(255,255,255,int(255*reveal)))
+        d.text((77,H-128),"Three men vanished into San Francisco Bay. Their fate is still unresolved.",font=font(27),fill=(213,224,229,245))
+        enc.stdin.write(im.convert("RGB").tobytes())
+    enc.stdin.close();rawpipe.stdout.close()
+    if enc.wait()!=0: raise RuntimeError("hook encode failed")
+    rawpipe.wait()
+
 def polish_image(src:Path,dst:Path):
     im=fit_crop(Image.open(src))
     im=ImageEnhance.Contrast(im).enhance(1.07)
@@ -276,8 +323,8 @@ def make_reconstruction_clip(cell_image:Path,evidence_image:Path,out:Path,durati
         y=max(0,(resized.height-H)//2)
         im=resized.crop((x,y,x+W,y+H)).convert("RGBA")
         d=ImageDraw.Draw(im,"RGBA")
-        d.rectangle((0,0,W,H),fill=(2,8,13,78))
-        d.rounded_rectangle((46,42,520,132),radius=12,fill=(0,5,10,210))
+        d.rectangle((0,0,W,H),fill=(2,8,13,42))
+        d.rounded_rectangle((46,42,580,132),radius=12,fill=(0,5,10,186))
         d.text((68,58),"RECONSTRUCTION DIAGRAM",font=font(34,True),fill=(244,177,91,255))
         d.text((69,101),"source-grounded • not historical footage",font=font(19),fill=(205,215,217,255))
         # Evidence inset and animated route from cell vent toward service corridor.
@@ -367,21 +414,31 @@ def main():
 
     wav=OUT/"narration.wav";srt=OUT/"subtitles.srt"
     audio_dur,timings=synthesize_narration(wav,srt)
-    # Twelve sub-5-second beats: real B-roll leads motion rather than Ken Burns alone.
+    # Fourteen ~4.6-second beats: the benchmark requires faster documentary visual cadence.
     duration=max(48.0,min(78.0,audio_dur+.35))
-    slot=duration/12.0
+    slot=duration/14.0
     src={x["id"]:Path(x["localPath"]) for x in sources if x["id"] not in videos}
     clips=[]
     plan=[
-      ("broll",videos["island-video"],0.0),("broll",videos["cell-doors-video"],0.0),("archive",src["cells"],0.0),
-      ("map",src["historic-map"],0.0),("broll",videos["isle-video"],0.0),("evidence",src["dummy-head"],0.0),
-      ("reconstruction",(src["cellhouse"],src["dummy-head"]),0.0),("broll",videos["cell-doors-video"],7.5),
-      ("archive",src["bay"],0.0),("map",src["historic-map"],0.0),("broll",videos["island-video"],8.5),
-      ("archive",src["guard"],0.0)
+      ("hook",videos["island-video"],0.0),
+      ("broll",videos["cell-doors-video"],0.0),
+      ("archive",src["cells"],0.0),
+      ("map",src["historic-map"],0.0),
+      ("broll",videos["isle-video"],0.0),
+      ("evidence",src["dummy-head"],0.0),
+      ("reconstruction",(src["cells"],src["dummy-head"]),0.0),
+      ("broll",videos["cell-doors-video"],7.5),
+      ("archive",src["bay"],0.0),
+      ("map",src["historic-map"],0.0),
+      ("broll",videos["island-video"],8.5),
+      ("archive",src["guard"],0.0),
+      ("broll",videos["isle-video"],8.5),
+      ("archive",src["island"],0.0)
     ]
     for i,(kind,asset,start) in enumerate(plan):
         clip=TMP/f"scene-{i+1:02}.mp4"
-        if kind=="archive": make_archive_clip(asset,clip,slot,i,kind)
+        if kind=="hook": make_hook_clip(asset,clip,slot)
+        elif kind=="archive": make_archive_clip(asset,clip,slot,i,kind)
         elif kind=="broll": make_broll_clip(asset,clip,slot,start)
         elif kind=="map": make_map_clip(asset,clip,slot)
         elif kind=="evidence": make_evidence_clip(asset,clip,slot)
@@ -395,7 +452,7 @@ def main():
 
     master=OUT/"alcatraz-open-media-audition.mp4"
     srt_filter_path=str(srt).replace("\\","/").replace(":","\\\\:")
-    subtitle_filter=f"subtitles='{srt_filter_path}':force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=42'"
+    subtitle_filter=f"subtitles='{srt_filter_path}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFFFF,OutlineColour=&HA0000000,BorderStyle=1,Outline=1.4,Shadow=0,MarginV=28'"
     audio_mix="[1:a]volume=1.0[n];[2:a]atrim=start=1:end=4,asetpts=PTS-STARTPTS,volume=0.12,adelay=14500:all=1[s];[n][s]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-16:LRA=11:TP=-1.5[a]"
     run([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(silent),"-i",str(wav),"-i",str(videos["cell-doors-video"]),
          "-filter_complex",audio_mix,"-vf",subtitle_filter,"-map","0:v:0","-map","[a]","-c:v","libx264","-preset","medium","-crf","18",
@@ -411,12 +468,12 @@ def main():
       "schema":"open-media.alcatraz-audition-qa.v1",
       "master":{"path":str(master),"sha256":sha256(master),"bytes":master.stat().st_size},
       "probe":json.loads(probe.stdout),"cadence":cadence,
-      "visualRoles":{"archive":3,"realBroll":5,"map":2,"evidence":1,"reconstructionDiagram":1},
+      "visualRoles":{"hook":1,"archive":4,"realBroll":5,"map":2,"evidence":1,"reconstructionDiagram":1},
       "rightsSafeArchiveCount":len(sources),
       "narration":{"engine":"Kokoro local CPU","voice":"am_michael","durationSec":audio_dur,"humanNaturalnessReview":"PENDING"},
       "benchmark":{"id":"youtube:XO1-4FH1X1I","sideBySideStatus":"PENDING"},
       "q9Status":"FAIL_UNTIL_HUMAN_REVIEW",
-      "knownGap":"No local AI-video reconstruction yet; this revision uses three distinct rights-checked Alcatraz motion sources, a real map-backed route treatment, and a source-image reconstruction diagram."
+      "knownGap":"No local AI-video reconstruction yet; this revision adds a real-footage opening hook, 14-beat cadence, three distinct rights-checked motion sources, map-backed route treatment, and evidence reconstruction."
     }
     (OUT/"qa.json").write_text(json.dumps(qa,indent=2)+"\n")
     print(json.dumps(qa,indent=2))
