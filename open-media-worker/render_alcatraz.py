@@ -323,7 +323,8 @@ def main():
          "-c","copy","-t",f"{duration:.3f}",str(silent)],timeout=1800)
 
     master=OUT/"alcatraz-open-media-audition.mp4"
-    srt_filter_path=str(srt).replace("\\","/").replace(":","\\\\:").replace("'","\\\\'")\n    subtitle_filter=f"subtitles='{srt_filter_path}':force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=42'"
+    srt_filter_path=str(srt).replace("\\","/").replace(":","\\\\:")
+    subtitle_filter=f"subtitles='{srt_filter_path}':force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=42'"
     run([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(silent),"-i",str(wav),
          "-vf",subtitle_filter,"-map","0:v:0","-map","1:a:0","-c:v","libx264","-preset","medium","-crf","18",
          "-pix_fmt","yuv420p","-af","loudnorm=I=-16:LRA=11:TP=-1.5","-c:a","aac","-b:a","192k","-ar","48000",
