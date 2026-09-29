@@ -1,0 +1,21 @@
+name: Public Hosted Runner Probe
+
+on:
+  push:
+    branches:
+      - render-probe-20260928
+    paths:
+      - .render-probe/trigger.txt
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prove public hosted runner
+        run: |
+          echo "PUBLIC_HOSTED_RUNNER_OK"
+          uname -a
