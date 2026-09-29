@@ -42,12 +42,14 @@ jobs:
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: python open-media-worker/render_alcatraz.py
       - name: Require master
+        if: always()
         run: |
           test -s render-output/alcatraz-open-media-audition.mp4
           test -s render-output/contact-sheet.jpg
           test -s render-output/qa.json
           sha256sum render-output/alcatraz-open-media-audition.mp4
       - name: Upload render
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: alcatraz-open-media-audition-${{ github.sha }}
