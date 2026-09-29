@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -24,7 +25,7 @@ OUT=Path(os.environ.get("OPEN_MEDIA_OUTPUT","dist")).resolve()
 TMP=OUT/"tmp"
 FFMPEG=shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE=shutil.which("ffprobe") or "ffprobe"
-UA="ALOS-Open-Media-Worker/1.0"
+UA="ALOS-Open-Media-Worker/1.1 (https://github.com/Gagan8atwal/hello-world-app)"
 FBI="https://www.fbi.gov/history/cases-and-criminals/alcatraz-escape"
 NPS="https://www.nps.gov/alca/learn/historyculture/escapes2.htm"
 COMMONS_API="https://commons.wikimedia.org/w/api.php"
@@ -83,7 +84,7 @@ def commons_search(label:str,query:str)->dict:
     params={
         "action":"query","format":"json","generator":"search","gsrnamespace":"6",
         "gsrsearch":query,"gsrlimit":"12","prop":"imageinfo",
-        "iiprop":"url|extmetadata|size"
+        "iiprop":"url|extmetadata|size","iiurlwidth":"1800"
     }
     r=requests.get(COMMONS_API,params=params,headers={"user-agent":UA},timeout=30)
     r.raise_for_status()
@@ -113,17 +114,29 @@ def commons_search(label:str,query:str)->dict:
     }
 
 def download(url:str,target:Path):
-    with requests.get(url,headers={"user-agent":UA},timeout=60,stream=True) as r:
-        r.raise_for_status()
-        target.parent.mkdir(parents=True,exist_ok=True)
-        total=0
-        with target.open("wb") as f:
-            for chunk in r.iter_content(1024*1024):
-                if not chunk: continue
-                total+=len(chunk)
-                if total>40*1024*1024: raise RuntimeError("archive image exceeds 40MB")
-                f.write(chunk)
-    if target.stat().st_size<10_000: raise RuntimeError(f"download too small: {target}")
+    target.parent.mkdir(parents=True,exist_ok=True)
+    last=None
+    for attempt in range(5):
+        try:
+            with requests.get(url,headers={"user-agent":UA,"accept":"image/avif,image/webp,image/apng,image/*,*/*;q=0.8"},timeout=60,stream=True) as r:
+                if r.status_code in (429,500,502,503,504):
+                    last=RuntimeError(f"transient archive HTTP {r.status_code}")
+                else:
+                    r.raise_for_status()
+                    total=0
+                    with target.open("wb") as f:
+                        for chunk in r.iter_content(1024*1024):
+                            if not chunk: continue
+                            total+=len(chunk)
+                            if total>40*1024*1024: raise RuntimeError("archive image exceeds 40MB")
+                            f.write(chunk)
+                    if target.stat().st_size<10_000: raise RuntimeError(f"download too small: {target}")
+                    return
+        except Exception as exc:
+            last=exc
+        if target.exists(): target.unlink()
+        time.sleep(min(16,2**attempt))
+    raise RuntimeError(f"archive download failed after retries: {url}: {last}")
 
 def fit_crop(im:Image.Image,size=(W,H))->Image.Image:
     im=im.convert("RGB")
@@ -292,7 +305,7 @@ def main():
     for label,query in SEARCHES:
         meta=commons_search(label,query)
         raw=archive_dir/f"{label}-raw.jpg";final=archive_dir/f"{label}.jpg"
-        download(meta["url"],raw);polish_image(raw,final)
+        download(meta["url"],raw);polish_image(raw,final);time.sleep(.8)
         meta.update({"localPath":str(final),"sha256":sha256(final)})
         sources.append(meta)
     (OUT/"sources.json").write_text(json.dumps({"schema":"open-media.sources.v1","items":sources},indent=2)+"\n")
