@@ -83,9 +83,8 @@ def scene_at(t:float):
     return SCENES[-1]
 
 def active_event(t:float):
-    for e in EVENTS:
-        if e.start<=t<e.start+e.duration:return e
-    return None
+    matches=[e for e in EVENTS if e.start<=t<e.start+e.duration]
+    return max(matches,key=lambda e:e.start) if matches else None
 
 def rms_envelope(pcm:np.ndarray,fps=FPS)->list[float]:
     if pcm is None or len(pcm)==0:return []
@@ -97,10 +96,17 @@ def rms_envelope(pcm:np.ndarray,fps=FPS)->list[float]:
         a=max(0,center-win//2);b=min(len(pcm),center+win//2)
         seg=pcm[a:b]
         vals.append(float(np.sqrt(np.mean(np.square(seg,dtype=np.float64))) if len(seg) else 0))
-    p95=float(np.percentile(vals,95)) if vals else 1
-    floor=min(vals) if vals else 0
-    den=max(1e-6,p95-floor)
-    return [clamp((x-floor)/den) for x in vals]
+    floor=float(np.percentile(vals,8)) if vals else 0
+    ceiling=float(np.percentile(vals,92)) if vals else 1
+    absolute=max(vals) if vals else 1
+    den=max(1e-6,ceiling-floor,absolute*.18)
+    normalized=[clamp((x-floor)/den)**.55 for x in vals]
+    # Guarantee that audible speech has useful visual range without inventing motion in silence.
+    peak=max(normalized) if normalized else 0
+    if absolute>1e-5 and peak<.35:
+        scale=.35/max(peak,1e-6)
+        normalized=[clamp(x*scale) for x in normalized]
+    return normalized
 
 def viseme_for(text:str,progress:float):
     letters=[c.lower() for c in text if c.isalpha()]
@@ -115,7 +121,7 @@ def viseme_for(text:str,progress:float):
 def synthesize_audio():
     from kokoro import KPipeline
     pipe=KPipeline(lang_code="a")
-    last=0.0
+    cursor=0.0
     for e in EVENTS:
         chunks=[]
         for _,_,audio in pipe(e.text,voice=e.voice,speed=e.speed,split_pattern=r"\n+"):
@@ -124,8 +130,13 @@ def synthesize_audio():
         e.pcm=np.concatenate(chunks)
         e.duration=len(e.pcm)/SR
         e.envelope=rms_envelope(e.pcm)
-        last=max(last,e.start+e.duration)
-    duration=max(36.0,last+1.0)
+        # Requested starts are lower bounds only. Reflow after real synthesis so speech never overlaps.
+        e.start=max(float(e.start),cursor+.18 if cursor>0 else float(e.start))
+        cursor=e.start+e.duration
+    for a,b in zip(EVENTS,EVENTS[1:]):
+        if b.start<a.start+a.duration+.15:
+            raise RuntimeError(f"speech overlap after reflow: {a.speaker}->{b.speaker}")
+    duration=max(36.0,cursor+1.0)
     total=round(duration*SR)
     mix=np.zeros(total,dtype=np.float32)
     # Soft original music bed: simple pentatonic plucks + airy ambience, fully local.
@@ -385,10 +396,16 @@ def qa(video:Path,wav:Path,contact:Path,frame_hashes,mouth_rows,silence_max):
     for e in EVENTS:
         if e.speaker=="narrator":continue
         rows=[r for r in mouth_rows if r["speaker"]==e.speaker and e.start<=r["time"]<e.start+e.duration]
-        env=np.asarray((e.envelope or [])[:len(rows)],dtype=float)
-        opens=np.asarray([r["open"] for r in rows[:len(env)]],dtype=float)
-        corr=float(np.corrcoef(env,opens)[0,1]) if len(env)>3 and np.std(env)>1e-6 and np.std(opens)>1e-6 else 1.0
-        line_results.append({"speaker":e.speaker,"startSec":e.start,"durationSec":e.duration,"frames":len(rows),"audioMouthCorrelation":corr,"maxOpen":float(opens.max() if len(opens) else 0),"passed":len(rows)>=6 and corr>=.95 and float(opens.max() if len(opens) else 0)>=.25})
+        expected=[];opens=[]
+        for r in rows:
+            idx=min(len(e.envelope or [])-1,max(0,int((r["time"]-e.start)*FPS))) if e.envelope else 0
+            expected.append((e.envelope or [0])[idx] if e.envelope else 0)
+            opens.append(r["open"])
+        env=np.asarray(expected,dtype=float);opens=np.asarray(opens,dtype=float)
+        corr=float(np.corrcoef(env,opens)[0,1]) if len(env)>3 and np.std(env)>1e-6 and np.std(opens)>1e-6 else (1.0 if np.allclose(env,opens,atol=1e-6) else 0.0)
+        max_open=float(opens.max() if len(opens) else 0)
+        timing_error=float(np.max(np.abs(env-opens))) if len(env) else 1.0
+        line_results.append({"speaker":e.speaker,"startSec":e.start,"durationSec":e.duration,"frames":len(rows),"audioMouthCorrelation":corr,"maxTimingError":timing_error,"maxOpen":max_open,"passed":len(rows)>=6 and corr>=.95 and timing_error<=.001 and max_open>=.30})
     result={
       "schema":"pikopop.public-lipsync-audition.v1",
       "master":{"path":str(video),"sha256":sha256(video),"bytes":video.stat().st_size},
@@ -397,10 +414,12 @@ def qa(video:Path,wav:Path,contact:Path,frame_hashes,mouth_rows,silence_max):
       "fps":FPS,
       "adjacentDuplicateFrames":sum(1 for a,b in zip(frame_hashes,frame_hashes[1:]) if a==b),
       "adjacentDuplicateRatio":sum(1 for a,b in zip(frame_hashes,frame_hashes[1:]) if a==b)/max(1,len(frame_hashes)-1),
+      "speechSchedule":[{"speaker":e.speaker,"startSec":e.start,"endSec":e.start+e.duration,"durationSec":e.duration,"voice":e.voice} for e in EVENTS],
+      "speechOverlapCount":sum(1 for a,b in zip(EVENTS,EVENTS[1:]) if b.start<a.start+a.duration),
       "mouthClosedInSilence":silence_max<=.001,
       "maxMouthOpenDuringSilence":silence_max,
       "lineLipSync":line_results,
-      "lipSyncPassed":all(x["passed"] for x in line_results) and silence_max<=.001,
+      "lipSyncPassed":all(x["passed"] for x in line_results) and silence_max<=.001 and all(b.start>=a.start+a.duration for a,b in zip(EVENTS,EVENTS[1:])),
       "trueFrameCadencePassed":(sum(1 for a,b in zip(frame_hashes,frame_hashes[1:]) if a==b)/max(1,len(frame_hashes)-1))<=.10,
       "humanQ9Status":"PENDING",
       "visualDirection":"V78-inspired bear/rabbit/turtle clean vector direction; clean-room public render worker",
