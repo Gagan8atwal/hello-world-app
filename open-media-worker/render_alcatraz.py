@@ -43,10 +43,10 @@ NARRATION=[
 
 SEARCHES=[
 ("dummy-head","Alcatraz dummy head escape Frank Morris"),
-("cellhouse","Alcatraz cellhouse interior"),
+("cellhouse","Alcatraz cellhouse prison interior"),
 ("cells","Alcatraz prison cells interior"),
 ("island","Alcatraz Island prison"),
-("guard","Alcatraz guard tower prison"),
+("guard","Alcatraz guardhouse Alcatraz Island"),
 ("bay","Alcatraz San Francisco Bay"),
 ]
 
@@ -84,7 +84,7 @@ def commons_search(label:str,query:str)->dict:
     params={
         "action":"query","format":"json","generator":"search","gsrnamespace":"6",
         "gsrsearch":query,"gsrlimit":"12","prop":"imageinfo",
-        "iiprop":"url|extmetadata|size","iiurlwidth":"1800"
+        "iiprop":"url|extmetadata|size|mime","iiurlwidth":"1800"
     }
     r=requests.get(COMMONS_API,params=params,headers={"user-agent":UA},timeout=30)
     r.raise_for_status()
@@ -95,6 +95,8 @@ def commons_search(label:str,query:str)->dict:
         meta=info.get("extmetadata") or {}
         license_text=" | ".join(str(meta.get(k,{}).get("value","")) for k in ["LicenseShortName","UsageTerms","Copyrighted"])
         url=info.get("thumburl") or info.get("url")
+        mime=str(info.get("mime") or "")
+        if not mime.startswith("image/"): continue
         w=int(info.get("thumbwidth") or info.get("width") or 0)
         h=int(info.get("thumbheight") or info.get("height") or 0)
         if not url or min(w,h)<500: continue
@@ -113,7 +115,7 @@ def commons_search(label:str,query:str)->dict:
         "sourcePage":"https://commons.wikimedia.org/wiki/"+requests.utils.quote(title.replace(" ","_"),safe=":/_"),
     }
 
-def download(url:str,target:Path):
+def download(url:str,target:Path,max_bytes:int=40*1024*1024):
     target.parent.mkdir(parents=True,exist_ok=True)
     last=None
     for attempt in range(5):
@@ -128,7 +130,7 @@ def download(url:str,target:Path):
                         for chunk in r.iter_content(1024*1024):
                             if not chunk: continue
                             total+=len(chunk)
-                            if total>40*1024*1024: raise RuntimeError("archive image exceeds 40MB")
+                            if total>max_bytes: raise RuntimeError(f"archive media exceeds {max_bytes} bytes")
                             f.write(chunk)
                     if target.stat().st_size<10_000: raise RuntimeError(f"download too small: {target}")
                     return
@@ -145,6 +147,30 @@ def fit_crop(im:Image.Image,size=(W,H))->Image.Image:
     x=(im.width-size[0])//2; y=(im.height-size[1])//2
     return im.crop((x,y,x+size[0],y+size[1]))
 
+def commons_exact_video(title:str)->dict:
+    params={"action":"query","format":"json","prop":"imageinfo","titles":title,
+            "iiprop":"url|extmetadata|size|mime"}
+    r=requests.get(COMMONS_API,params=params,headers={"user-agent":UA},timeout=30)
+    r.raise_for_status()
+    page=next(iter((r.json().get("query",{}).get("pages",{}) or {}).values()),{})
+    info=(page.get("imageinfo") or [None])[0] or {}
+    meta=info.get("extmetadata") or {}
+    license_text=" | ".join(str(meta.get(k,{}).get("value","")) for k in ["LicenseShortName","UsageTerms","Copyrighted"])
+    mime=str(info.get("mime") or "")
+    url=info.get("url")
+    if not url or not mime.startswith("video/"): raise RuntimeError(f"Commons video unavailable: {title}")
+    if not any(x in license_text.lower() for x in LICENSE_OK): raise RuntimeError(f"Commons video license rejected: {license_text}")
+    return {"id":"cell-doors-video","title":page.get("title",title),"url":url,"mime":mime,
+            "license":clean_html(license_text),
+            "artist":clean_html(str(meta.get("Artist",{}).get("value",""))),
+            "credit":clean_html(str(meta.get("Credit",{}).get("value",""))),
+            "sourcePage":"https://commons.wikimedia.org/wiki/"+requests.utils.quote(title.replace(" ","_"),safe=":/_")}
+
+def make_broll_clip(video:Path,out:Path,duration:float,start:float):
+    run([FFMPEG,"-hide_banner","-loglevel","error","-y","-ss",f"{start:.3f}","-i",str(video),
+         "-t",f"{duration:.3f}","-vf",f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},eq=contrast=1.05:saturation=.92:brightness=-.01,fps={FPS},format=yuv420p",
+         "-an","-c:v","libx264","-preset","medium","-crf","18","-pix_fmt","yuv420p",str(out)],timeout=900)
+
 def polish_image(src:Path,dst:Path):
     im=fit_crop(Image.open(src))
     im=ImageEnhance.Contrast(im).enhance(1.07)
@@ -158,9 +184,9 @@ def polish_image(src:Path,dst:Path):
     im.save(dst,quality=94)
 
 def make_archive_clip(image:Path,out:Path,duration:float,mode:int,title:str):
-    z = "min(zoom+0.00055,1.10)" if mode%2==0 else "if(lte(on,1),1.10,max(1,zoom-0.00055))"
-    x = "iw/2-(iw/zoom/2)+sin(on/70)*9"
-    y = "ih/2-(ih/zoom/2)+cos(on/83)*6"
+    z = "min(zoom+0.0012,1.18)" if mode%2==0 else "if(lte(on,1),1.18,max(1,zoom-0.0012))"
+    x = "iw/2-(iw/zoom/2)+sin(on/48)*28"
+    y = "ih/2-(ih/zoom/2)+cos(on/57)*16"
     vf=(
         f"scale=2200:-2,zoompan=z='{z}':x='{x}':y='{y}':"
         f"d=1:s={W}x{H}:fps={FPS},"
@@ -197,6 +223,8 @@ def make_map_clip(out:Path,duration:float):
         for pos,label in [(alca,"ALCATRAZ"),(sf,"SAN FRANCISCO"),(angel,"ANGEL IS."),(marin,"MARIN")]:
             d.text((pos[0]-72,pos[1]+58 if pos==alca else pos[1]+24),label,font=font(24,True),fill=(235,238,233,245))
         routes=[(sf,(239,164,82,245),7),(angel,(196,204,206,150),4),(marin,(196,204,206,150),4)]
+        pulse=6+round(4*(.5+.5*math.sin(n/7)))
+        d.ellipse((alca[0]-pulse,alca[1]-pulse,alca[0]+pulse,alca[1]+pulse),outline=(245,181,92,240),width=3)
         for i,(target,color,width) in enumerate(routes):
             q=max(0,min(1,(t-i*.11)/.72))
             ex=alca[0]+(target[0]-alca[0])*q; ey=alca[1]+(target[1]-alca[1])*q
@@ -308,23 +336,30 @@ def main():
         download(meta["url"],raw);polish_image(raw,final);time.sleep(.8)
         meta.update({"localPath":str(final),"sha256":sha256(final)})
         sources.append(meta)
-    (OUT/"sources.json").write_text(json.dumps({"schema":"open-media.sources.v1","items":sources},indent=2)+"\n")
+    video_meta=commons_exact_video("File:Alcatraz San Francisco's Prison The Sound of the Cell Doors.webm")
+    broll_source=archive_dir/"alcatraz-cell-doors.webm"
+    download(video_meta["url"],broll_source,max_bytes=80*1024*1024)
+    video_meta.update({"localPath":str(broll_source),"sha256":sha256(broll_source)})
+    sources.append(video_meta)
+    (OUT/"sources.json").write_text(json.dumps({"schema":"open-media.sources.v2","items":sources},indent=2)+"\n")
 
     wav=OUT/"narration.wav";srt=OUT/"subtitles.srt"
     audio_dur,timings=synthesize_narration(wav,srt)
-    # Keep 10 visual beats and make master match narration.
+    # Twelve sub-5-second beats: real B-roll leads motion rather than Ken Burns alone.
     duration=max(48.0,min(78.0,audio_dur+.35))
-    slot=duration/10.0
-    src={x["id"]:Path(x["localPath"]) for x in sources}
+    slot=duration/12.0
+    src={x["id"]:Path(x["localPath"]) for x in sources if x["id"]!="cell-doors-video"}
     clips=[]
     plan=[
-      ("archive",src["island"]),("archive",src["cellhouse"]),("map",None),("archive",src["cells"]),
-      ("evidence",src["dummy-head"]),("reconstruction",None),("archive",src["guard"]),("archive",src["bay"]),
-      ("map",None),("archive",src["island"])
+      ("archive",src["island"],0.0),("broll",broll_source,0.0),("map",None,0.0),
+      ("archive",src["cells"],0.0),("evidence",src["dummy-head"],0.0),("broll",broll_source,6.0),
+      ("reconstruction",None,0.0),("archive",src["bay"],0.0),("broll",broll_source,12.0),
+      ("map",None,0.0),("archive",src["cellhouse"],0.0),("archive",src["guard"],0.0)
     ]
-    for i,(kind,asset) in enumerate(plan):
+    for i,(kind,asset,start) in enumerate(plan):
         clip=TMP/f"scene-{i+1:02}.mp4"
         if kind=="archive": make_archive_clip(asset,clip,slot,i,kind)
+        elif kind=="broll": make_broll_clip(asset,clip,slot,start)
         elif kind=="map": make_map_clip(clip,slot)
         elif kind=="evidence": make_evidence_clip(asset,clip,slot)
         else: make_reconstruction_clip(clip,slot)
@@ -338,9 +373,10 @@ def main():
     master=OUT/"alcatraz-open-media-audition.mp4"
     srt_filter_path=str(srt).replace("\\","/").replace(":","\\\\:")
     subtitle_filter=f"subtitles='{srt_filter_path}':force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=42'"
-    run([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(silent),"-i",str(wav),
-         "-vf",subtitle_filter,"-map","0:v:0","-map","1:a:0","-c:v","libx264","-preset","medium","-crf","18",
-         "-pix_fmt","yuv420p","-af","loudnorm=I=-16:LRA=11:TP=-1.5","-c:a","aac","-b:a","192k","-ar","48000",
+    audio_mix="[1:a]volume=1.0[n];[2:a]atrim=start=1:end=4,asetpts=PTS-STARTPTS,volume=0.12,adelay=14500:all=1[s];[n][s]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-16:LRA=11:TP=-1.5[a]"
+    run([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(silent),"-i",str(wav),"-i",str(broll_source),
+         "-filter_complex",audio_mix,"-vf",subtitle_filter,"-map","0:v:0","-map","[a]","-c:v","libx264","-preset","medium","-crf","18",
+         "-pix_fmt","yuv420p","-c:a","aac","-b:a","192k","-ar","48000",
          "-shortest","-movflags","+faststart",str(master)],timeout=2400)
 
     contact=OUT/"contact-sheet.jpg"
@@ -352,12 +388,12 @@ def main():
       "schema":"open-media.alcatraz-audition-qa.v1",
       "master":{"path":str(master),"sha256":sha256(master),"bytes":master.stat().st_size},
       "probe":json.loads(probe.stdout),"cadence":cadence,
-      "visualRoles":{"archive":6,"map":2,"evidence":1,"reconstruction":1},
+      "visualRoles":{"archive":5,"realBroll":3,"map":2,"evidence":1,"reconstruction":1},
       "rightsSafeArchiveCount":len(sources),
       "narration":{"engine":"Kokoro local CPU","voice":"af_heart","durationSec":audio_dur,"humanNaturalnessReview":"PENDING"},
       "benchmark":{"id":"youtube:XO1-4FH1X1I","sideBySideStatus":"PENDING"},
       "q9Status":"FAIL_UNTIL_HUMAN_REVIEW",
-      "knownGap":"No local AI-video reconstruction in this first public-worker audition; reconstruction is explicitly labeled and locally animated."
+      "knownGap":"No local AI-video reconstruction yet; this revision adds genuine licensed Alcatraz motion footage and authentic cell-door sound while keeping reconstruction explicitly labeled."
     }
     (OUT/"qa.json").write_text(json.dumps(qa,indent=2)+"\n")
     print(json.dumps(qa,indent=2))
