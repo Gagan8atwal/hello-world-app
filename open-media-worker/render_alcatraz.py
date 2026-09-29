@@ -63,6 +63,9 @@ def run(cmd:list[str], timeout:int=1800)->subprocess.CompletedProcess:
         raise RuntimeError(f"{cmd[0]} failed ({p.returncode}): {(p.stderr or p.stdout)[-3000:]}")
     return p
 
+def clamp(v,a=0.0,b=1.0):
+    return max(a,min(b,float(v)))
+
 def sha256(path:Path)->str:
     h=hashlib.sha256()
     with path.open("rb") as f:
