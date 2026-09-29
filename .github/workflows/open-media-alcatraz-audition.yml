@@ -1,0 +1,50 @@
+name: Open Media Alcatraz Audition
+
+on:
+  push:
+    branches:
+      - open-media-render-worker-20260928
+    paths:
+      - .render-worker/alcatraz.trigger
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout render worker
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+      - name: Install open-source runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng libsndfile1 fonts-dejavu-core
+          python -m pip install --upgrade pip
+          python -m pip install -r open-media-worker/requirements.txt
+      - name: Render real 1080p audition master
+        env:
+          OPEN_MEDIA_OUTPUT: ${{ github.workspace }}/render-output
+          HF_HUB_DISABLE_TELEMETRY: "1"
+        run: python open-media-worker/render_alcatraz.py
+      - name: Require master
+        run: |
+          test -s render-output/alcatraz-open-media-audition.mp4
+          test -s render-output/contact-sheet.jpg
+          test -s render-output/qa.json
+          sha256sum render-output/alcatraz-open-media-audition.mp4
+      - name: Upload render
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: alcatraz-open-media-audition-${{ github.sha }}
+          path: render-output/**
+          retention-days: 3
+          if-no-files-found: error
