@@ -187,13 +187,20 @@ def background(scene,t):
         for x in range(100,1900,240):
             d.rectangle((x,410,x+18,575),fill=(99,83,53,255))
             d.ellipse((x-48,360,x+68,465),fill=(48,121,66,255))
-        # path
+        # path + near-field grass/flowers for depth
         d.polygon([(710,H),(1170,H),(1040,510),(850,510)],fill=(224,208,151,255))
+        for x in range(35,W,85):
+            yy=820+(x*37)%190
+            d.line((x,yy,x+5,yy-24),fill=(50,120,63,180),width=4)
+            if x%170<90:d.ellipse((x-5,yy-34,x+9,yy-20),fill=(245,180+(x%50),102,225))
     elif bg=="creek":
         d.rectangle((0,500,W,760),fill=(72,148,82,255))
         d.rectangle((0,760,W,H),fill=(81,178,221,255))
         for y in range(800,H,42):
             d.line((0,y,W,y),fill=(200,239,255,135),width=6)
+        for x in range(20,W,150):
+            d.line((x,760,x+12,700),fill=(44,110,59,220),width=7)
+            d.line((x+18,760,x+38,710),fill=(52,124,65,200),width=6)
         # broken bridge
         d.rectangle((580,690,1340,740),fill=(122,83,49,255))
         for x in range(590,1340,92):d.rectangle((x,680,x+55,750),fill=(155,103,59,255))
@@ -266,7 +273,8 @@ def character(who,x,y,scale,t,action,mouth,shape):
         # ears/head
         for ex in (-38,38):d.ellipse((cx+(ex-22)*s,cy-112*s,cx+(ex+22)*s,cy-68*s),fill=body,outline=dark,width=max(2,int(4*s)))
         d.ellipse((cx-66*s,cy-100*s,cx+66*s,cy+20*s),fill=(201,132,82,255),outline=dark,width=max(2,int(4*s)))
-        d.ellipse((cx-42*s,cy-50*s,cx+42*s,cy-5*s),fill=muzzle)
+        d.ellipse((cx-43*s,cy-51*s,cx+43*s,cy-4*s),fill=muzzle)
+        d.ellipse((cx-55*s,cy+12*s,cx+55*s,cy+96*s),outline=(224,154,98,90),width=max(2,int(3*s)))
         face(d,cx,cy-46*s,s,mouth,shape)
     elif who=="lumi":
         fur=(245,244,248,255);edge=(132,128,143,255);shirt=(151,112,200,255);pink=(242,150,176,255)
@@ -283,6 +291,8 @@ def character(who,x,y,scale,t,action,mouth,shape):
         d.ellipse((cx-38*s,cy-166*s-ear_sway,cx-24*s,cy-90*s),fill=pink)
         d.ellipse((cx+24*s,cy-158*s+ear_sway,cx+38*s,cy-90*s),fill=pink)
         d.ellipse((cx-66*s,cy-106*s,cx+66*s,cy+14*s),fill=fur,outline=edge,width=max(2,int(4*s)))
+        d.ellipse((cx-54*s,cy+14*s,cx+54*s,cy+98*s),fill=(171,128,216,90))
+        d.arc((cx-32*s,cy-73*s,cx+32*s,cy-30*s),188,352,fill=(205,137,164,150),width=max(2,int(2*s)))
         face(d,cx,cy-50*s,s,mouth,shape)
     else:
         skin=(158,203,124,255);edge=(48,89,55,255);shell=(76,145,79,255);shell2=(134,190,107,255)
@@ -293,12 +303,55 @@ def character(who,x,y,scale,t,action,mouth,shape):
         limb(d,(cx-58*s,cy+20*s),ends[0],int(20*s),skin,edge);limb(d,(cx+58*s,cy+20*s),ends[1],int(20*s),skin,edge)
         d.ellipse((cx-78*s,cy-5*s,cx+78*s,cy+112*s),fill=shell,outline=edge,width=max(2,int(4*s)))
         d.ellipse((cx-58*s,cy+10*s,cx+58*s,cy+100*s),fill=shell2,outline=edge,width=max(2,int(3*s)))
+        d.ellipse((cx-34*s,cy+28*s,cx+34*s,cy+84*s),outline=(82,139,75,180),width=max(2,int(3*s)))
         for ang in [0,math.pi/3,2*math.pi/3]:
             dx=math.cos(ang)*45*s;dy=math.sin(ang)*38*s
             d.line((cx-dx,cy+55*s-dy,cx+dx,cy+55*s+dy),fill=(65,119,67,230),width=max(2,int(3*s)))
         d.ellipse((cx-58*s,cy-100*s,cx+58*s,cy+8*s),fill=skin,outline=edge,width=max(2,int(4*s)))
         face(d,cx,cy-48*s,s,mouth,shape)
     return layer
+
+def composition_positions(scene,active,t):
+    # Dialogue gets a real performance close-up so face/lip acting is visible.
+    speaker=active.speaker if active and active.speaker in ("milo","lumi","tiko") else None
+    if speaker=="milo":
+        return {"milo":(900,690,1.48),"lumi":(1370,735,.82),"tiko":(1600,750,.72)}
+    if speaker=="lumi":
+        return {"milo":(505,740,.82),"lumi":(960,690,1.46),"tiko":(1500,750,.74)}
+    if speaker=="tiko":
+        return {"milo":(470,745,.78),"lumi":(1460,735,.82),"tiko":(980,700,1.38)}
+    if scene["bg"]=="meadow":
+        return {"milo":(650,690,1.18),"lumi":(1000,695,1.14),"tiko":(1340,710,1.05)}
+    if scene["bg"]=="creek":
+        return {"milo":(590,700,1.05),"lumi":(960,700,1.18),"tiko":(1345,715,1.00)}
+    if scene["bg"]=="forest":
+        drift=int((t-scene["start"])*16)
+        return {"milo":(620+drift,705,1.10),"lumi":(985+drift,700,1.06),"tiko":(1320+drift,715,1.00)}
+    return {"milo":(650,700,1.20),"lumi":(1000,700,1.18),"tiko":(1340,710,1.10)}
+
+def performance_lower_third(im,active):
+    if not active:return
+    d=ImageDraw.Draw(im,"RGBA")
+    label="Narrator" if active.speaker=="narrator" else active.speaker.title()
+    words=active.text.split();lines=[];line=""
+    for word in words:
+        test=(line+" "+word).strip()
+        if len(test)>54:
+            if line:lines.append(line)
+            line=word
+        else:line=test
+    if line:lines.append(line)
+    lines=lines[:2]
+    box_w=1160 if len(lines)>1 else 1050
+    box_h=104 if len(lines)>1 else 78
+    x=(W-box_w)//2;y=H-box_h-34
+    d.rounded_rectangle((x,y,x+box_w,y+box_h),radius=22,fill=(7,20,28,205),outline=(255,255,255,32),width=2)
+    pill_w=128
+    d.rounded_rectangle((x+16,y+16,x+16+pill_w,y+48),radius=12,fill=(240,176,86,235))
+    d.text((x+32,y+21),label,font=font(18,True),fill=(54,42,33,255))
+    tx=x+16+pill_w+22
+    for i,line in enumerate(lines):
+        d.text((tx,y+18+i*34),line,font=font(23,True),fill=(255,255,255,255))
 
 def draw_props(im,scene,t):
     d=ImageDraw.Draw(im,"RGBA")
@@ -343,16 +396,8 @@ def render_video(audio:np.ndarray,duration:float):
                 amp=(active.envelope or [0])[idx] if active.envelope else 0
                 shape=viseme_for(active.text,clamp(local/max(.001,active.duration)))
             state[who]=(amp,shape)
-        # Camera/staging
-        if scene["bg"]=="meadow":
-            pos={"milo":(680,690,1.15),"lumi":(1000,700,1.10),"tiko":(1320,710,1.02)}
-        elif scene["bg"]=="creek":
-            pos={"milo":(620,700,1.03),"lumi":(980,700,1.24),"tiko":(1370,720,.98)}
-        elif scene["bg"]=="forest":
-            drift=int((t-scene["start"])*18)
-            pos={"milo":(680+drift,705,1.08),"lumi":(1030+drift,700,1.03),"tiko":(1370+drift,715,.98)}
-        else:
-            pos={"milo":(690,700,1.16),"lumi":(1010,700,1.14),"tiko":(1325,710,1.06)}
+        # Speaker-aware performance staging: dialogue faces are large enough for lip acting.
+        pos=composition_positions(scene,active,t)
         for who in ("milo","lumi","tiko"):
             x,y,s=pos[who];amp,shape=state[who]
             layer=character(who,x,y,s,t,scene["action"][who],amp,shape)
@@ -360,20 +405,7 @@ def render_video(audio:np.ndarray,duration:float):
             mouth_rows.append({"frame":frame,"time":t,"speaker":who,"active":bool(active and active.speaker==who),"open":float(amp)})
             if not(active and active.speaker==who):silence_max=max(silence_max,float(amp))
         draw_props(im,scene,t);title_brand(im)
-        if active:
-            d=ImageDraw.Draw(im,"RGBA")
-            bar=(155,H-142,W-155,H-58);d.rounded_rectangle(bar,radius=18,fill=(5,18,26,220))
-            label="Narrator" if active.speaker=="narrator" else active.speaker.title()
-            d.text((190,H-126),label,font=font(20,True),fill=(247,191,98,255))
-            # wrap simple
-            words=active.text.split();lines=[];line=""
-            for word in words:
-                test=(line+" "+word).strip()
-                if len(test)>62:lines.append(line);line=word
-                else:line=test
-            if line:lines.append(line)
-            for i,line in enumerate(lines[:2]):
-                d.text((350,H-130+i*38),line,font=font(27,True),fill=(255,255,255,255))
+        performance_lower_third(im,active)
         frame_im=im.convert("RGB")
         small=frame_im.resize((96,54),Image.Resampling.BILINEAR)
         h=hashlib.sha1(small.tobytes()).hexdigest();frame_hashes.append(h)
@@ -422,7 +454,7 @@ def qa(video:Path,wav:Path,contact:Path,frame_hashes,mouth_rows,silence_max):
       "lipSyncPassed":all(x["passed"] for x in line_results) and silence_max<=.001 and all(b.start>=a.start+a.duration for a,b in zip(EVENTS,EVENTS[1:])),
       "trueFrameCadencePassed":(sum(1 for a,b in zip(frame_hashes,frame_hashes[1:]) if a==b)/max(1,len(frame_hashes)-1))<=.10,
       "humanQ9Status":"PENDING",
-      "visualDirection":"V78-inspired bear/rabbit/turtle clean vector direction; clean-room public render worker",
+      "visualDirection":"V78-inspired bear/rabbit/turtle clean vector direction with speaker close-ups, richer staging, and reduced lower-third dominance; clean-room public render worker",
       "contactSheet":str(contact),
     }
     (OUT/"qa.json").write_text(json.dumps(result,indent=2)+"\n")
