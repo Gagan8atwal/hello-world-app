@@ -39,20 +39,36 @@ jobs:
       - name: Validate worker
         run: python -m py_compile open-pikopop-worker/render_pikopop.py
       - name: Render true-24fps PikoPop proof
+        id: render
+        continue-on-error: true
         env:
           PIKOPOP_PUBLIC_OUTPUT: ${{ github.workspace }}/render-output
           HF_HUB_DISABLE_TELEMETRY: "1"
         run: python open-pikopop-worker/render_pikopop.py
       - name: Require playable proof
+        if: always()
         run: |
           test -s render-output/pikopop-public-audition.mp4
           test -s render-output/pikopop-public-contact-sheet.jpg
           test -s render-output/qa.json
           sha256sum render-output/pikopop-public-audition.mp4
       - name: Upload proof
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: pikopop-public-lipsync-${{ github.sha }}
           path: render-output/**
           retention-days: 3
           if-no-files-found: error
+
+      - name: Enforce lip-sync and cadence QA
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          q=json.load(open("render-output/qa.json"))
+          assert q["lipSyncPassed"] is True, q["lineLipSync"]
+          assert q["trueFrameCadencePassed"] is True, q["adjacentDuplicateRatio"]
+          assert q["mouthClosedInSilence"] is True, q["maxMouthOpenDuringSilence"]
+          assert q["speechOverlapCount"] == 0, q["speechSchedule"]
+          PY
