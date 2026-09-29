@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: open-media-alcatraz-current
+  cancel-in-progress: true
+
 jobs:
   render:
     runs-on: ubuntu-latest
@@ -30,6 +34,8 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg espeak-ng libsndfile1 fonts-dejavu-core
           python -m pip install --upgrade pip
           python -m pip install -r open-media-worker/requirements.txt
+      - name: Validate worker source
+        run: python -m py_compile open-media-worker/render_alcatraz.py
       - name: Render real 1080p audition master
         env:
           OPEN_MEDIA_OUTPUT: ${{ github.workspace }}/render-output
