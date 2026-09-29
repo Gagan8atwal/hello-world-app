@@ -48,6 +48,7 @@ SEARCHES=[
 ("island","Alcatraz Island prison"),
 ("guard","Alcatraz guardhouse Alcatraz Island"),
 ("bay","Alcatraz San Francisco Bay"),
+("historic-map","San francisco bay map Alcatraz NASA"),
 ]
 
 LICENSE_OK=("public domain","cc0","cc by","cc-by","cc by-sa","cc-by-sa","creative commons")
@@ -147,7 +148,7 @@ def fit_crop(im:Image.Image,size=(W,H))->Image.Image:
     x=(im.width-size[0])//2; y=(im.height-size[1])//2
     return im.crop((x,y,x+size[0],y+size[1]))
 
-def commons_exact_video(title:str)->dict:
+def commons_exact_video(title:str,label:str)->dict:
     params={"action":"query","format":"json","prop":"imageinfo","titles":title,
             "iiprop":"url|extmetadata|size|mime"}
     r=requests.get(COMMONS_API,params=params,headers={"user-agent":UA},timeout=30)
@@ -160,7 +161,7 @@ def commons_exact_video(title:str)->dict:
     url=info.get("url")
     if not url or not mime.startswith("video/"): raise RuntimeError(f"Commons video unavailable: {title}")
     if not any(x in license_text.lower() for x in LICENSE_OK): raise RuntimeError(f"Commons video license rejected: {license_text}")
-    return {"id":"cell-doors-video","title":page.get("title",title),"url":url,"mime":mime,
+    return {"id":label,"title":page.get("title",title),"url":url,"mime":mime,
             "license":clean_html(license_text),
             "artist":clean_html(str(meta.get("Artist",{}).get("value",""))),
             "credit":clean_html(str(meta.get("Credit",{}).get("value",""))),
@@ -209,30 +210,38 @@ def write_raw_video(out:Path,duration:float,frame_fn):
     proc.stdin.close()
     if proc.wait()!=0: raise RuntimeError(f"raw-video encode failed: {out}")
 
-def make_map_clip(out:Path,duration:float):
+def make_map_clip(map_image:Path,out:Path,duration:float):
+    base=fit_crop(Image.open(map_image)).convert("RGB")
+    base=ImageEnhance.Contrast(base).enhance(1.15)
+    base=ImageEnhance.Color(base).enhance(.55)
+    dark=Image.new("RGBA",(W,H),(3,14,24,145))
+    base=Image.alpha_composite(base.convert("RGBA"),dark).convert("RGB")
     def frame(n,t):
-        im=Image.new("RGB",(W,H),(7,29,45));d=ImageDraw.Draw(im,"RGBA")
-        # Stylized San Francisco Bay geography, explicitly schematic.
-        d.polygon([(0,610),(220,530),(430,565),(650,505),(820,610),(690,1080),(0,1080)],fill=(53,70,65,255))
-        d.polygon([(1490,0),(1920,0),(1920,1080),(1740,910),(1600,670),(1660,390)],fill=(50,67,62,255))
-        alca=(1110,450); sf=(460,770); angel=(1370,245); marin=(1600,620)
-        d.ellipse((alca[0]-95,alca[1]-48,alca[0]+95,alca[1]+48),fill=(79,88,76,255),outline=(220,224,207,220),width=3)
-        d.ellipse((angel[0]-140,angel[1]-75,angel[0]+140,angel[1]+75),fill=(64,78,68,255),outline=(130,150,136,180),width=2)
-        d.text((58,54),"ESCAPE ROUTE • SCHEMATIC",font=font(42,True),fill=(245,241,232,255))
-        d.text((58,112),"June 1962 • San Francisco Bay",font=font(25),fill=(190,205,212,255))
-        for pos,label in [(alca,"ALCATRAZ"),(sf,"SAN FRANCISCO"),(angel,"ANGEL IS."),(marin,"MARIN")]:
-            d.text((pos[0]-72,pos[1]+58 if pos==alca else pos[1]+24),label,font=font(24,True),fill=(235,238,233,245))
-        routes=[(sf,(239,164,82,245),7),(angel,(196,204,206,150),4),(marin,(196,204,206,150),4)]
-        pulse=6+round(4*(.5+.5*math.sin(n/7)))
-        d.ellipse((alca[0]-pulse,alca[1]-pulse,alca[0]+pulse,alca[1]+pulse),outline=(245,181,92,240),width=3)
+        im=base.copy().convert("RGBA");d=ImageDraw.Draw(im,"RGBA")
+        alca=(1110,468); sf=(474,805); angel=(1390,246); marin=(1608,604)
+        d.rounded_rectangle((44,42,750,144),radius=14,fill=(0,8,16,205))
+        d.text((66,58),"THE BAY WAS THE FINAL BARRIER",font=font(36,True),fill=(248,241,226,255))
+        d.text((68,106),"June 1962 • route possibilities, not proven paths",font=font(21),fill=(190,207,214,255))
+        routes=[(sf,(244,164,75,245),8),(angel,(216,222,222,155),4),(marin,(216,222,222,155),4)]
+        pulse=9+round(5*(.5+.5*math.sin(n/6)))
+        d.ellipse((alca[0]-pulse,alca[1]-pulse,alca[0]+pulse,alca[1]+pulse),fill=(242,171,82,70),outline=(249,189,101,255),width=4)
+        d.text((alca[0]+18,alca[1]-38),"ALCATRAZ",font=font(23,True),fill=(255,245,224,255))
         for i,(target,color,width) in enumerate(routes):
-            q=max(0,min(1,(t-i*.11)/.72))
-            ex=alca[0]+(target[0]-alca[0])*q; ey=alca[1]+(target[1]-alca[1])*q
-            d.line((alca[0],alca[1],ex,ey),fill=color,width=width)
-            if q>.98:d.ellipse((target[0]-7,target[1]-7,target[0]+7,target[1]+7),fill=color)
-        d.rectangle((55,H-104,W-55,H-45),fill=(2,15,25,180))
-        d.text((78,H-91),"SOURCE GROUNDING: FBI + NPS • exact route and outcome unresolved",font=font(23),fill=(218,225,227,240))
-        return im
+            q=max(0,min(1,(t-i*.10)/.76))
+            # Curved route approximation with two segments for documentary-map motion.
+            mid=((alca[0]+target[0])*.5+(-55 if i==0 else 45),(alca[1]+target[1])*.5-65)
+            p1=(alca[0]+(mid[0]-alca[0])*min(1,q*2),alca[1]+(mid[1]-alca[1])*min(1,q*2))
+            if q<=.5:
+                d.line((alca[0],alca[1],p1[0],p1[1]),fill=color,width=width)
+            else:
+                d.line((alca[0],alca[1],mid[0],mid[1]),fill=color,width=width)
+                q2=(q-.5)*2
+                ex=mid[0]+(target[0]-mid[0])*q2;ey=mid[1]+(target[1]-mid[1])*q2
+                d.line((mid[0],mid[1],ex,ey),fill=color,width=width)
+            if q>.98:d.ellipse((target[0]-8,target[1]-8,target[0]+8,target[1]+8),fill=color)
+        d.rectangle((48,H-102,W-48,H-42),fill=(0,7,13,205))
+        d.text((72,H-88),"MAP BASE: RIGHTS-CHECKED WIKIMEDIA SOURCE • ROUTES: FBI/NPS SOURCE-GROUNDED • OUTCOME UNRESOLVED",font=font(21),fill=(223,229,229,245))
+        return im.convert("RGB")
     write_raw_video(out,duration,frame)
 
 def make_evidence_clip(image:Path,out:Path,duration:float):
@@ -254,38 +263,44 @@ def make_evidence_clip(image:Path,out:Path,duration:float):
         return im.convert("RGB")
     write_raw_video(out,duration,frame)
 
-def make_reconstruction_clip(out:Path,duration:float):
+def make_reconstruction_clip(cell_image:Path,evidence_image:Path,out:Path,duration:float):
+    cell=fit_crop(Image.open(cell_image)).convert("RGB")
+    cell=ImageEnhance.Contrast(cell).enhance(1.08)
+    evidence=Image.open(evidence_image).convert("RGB")
+    evidence.thumbnail((650,520),Image.Resampling.LANCZOS)
     def frame(n,t):
-        im=Image.new("RGB",(W,H),(10,14,19));d=ImageDraw.Draw(im,"RGBA")
-        # perspective corridor, deliberately labeled reconstruction.
-        horizon=420
-        d.polygon([(0,H),(W,H),(1320,horizon),(600,horizon)],fill=(41,44,46,255))
-        d.polygon([(0,0),(600,horizon),(1320,horizon),(W,0)],fill=(25,28,30,255))
-        d.polygon([(0,0),(0,H),(600,horizon)],fill=(31,34,36,255))
-        d.polygon([(W,0),(1320,horizon),(W,H)],fill=(30,33,35,255))
-        # sliding camera parallax
-        drift=(t-.5)*110
-        for i in range(7):
-            yy=horizon+70+i*73
-            d.line((0,yy,W,yy),fill=(116,120,118,80),width=2)
-        for i in range(5):
-            x=610+i*145+drift
-            d.rectangle((x,horizon-20,x+92,horizon+240),outline=(116,121,119,190),width=5)
-            for b in range(5):
-                bx=x+13+b*16
-                d.line((bx,horizon-14,bx,horizon+214),fill=(145,150,147,180),width=4)
-        # silhouette moving through service corridor
-        sx=860+round((t-.5)*260);sy=690
-        d.ellipse((sx-26,sy-112,sx+26,sy-60),fill=(8,9,10,255))
-        d.rounded_rectangle((sx-35,sy-65,sx+35,sy+48),radius=20,fill=(8,9,10,255))
-        d.line((sx-22,sy+40,sx-43,sy+116),fill=(8,9,10,255),width=18)
-        d.line((sx+22,sy+40,sx+48,sy+116),fill=(8,9,10,255),width=18)
-        # flashlight beam
-        d.polygon([(sx+30,sy-30),(sx+390,sy-135),(sx+390,sy+70)],fill=(229,214,164,28))
-        d.rectangle((50,48,405,108),fill=(0,0,0,190))
-        d.text((70,61),"RECONSTRUCTION",font=font(31,True),fill=(245,177,92,255))
-        d.text((70,H-88),"UTILITY CORRIDOR • SOURCE-GROUNDED, NOT HISTORICAL FOOTAGE",font=font(22),fill=(208,214,214,245))
-        return im
+        # Slow push on real source image, with forensic overlays rather than fake historical footage.
+        scale=1.0+.06*t
+        resized=cell.resize((round(W*scale),round(H*scale)),Image.Resampling.LANCZOS)
+        x=max(0,(resized.width-W)//2+round(math.sin(t*math.pi)*22))
+        y=max(0,(resized.height-H)//2)
+        im=resized.crop((x,y,x+W,y+H)).convert("RGBA")
+        d=ImageDraw.Draw(im,"RGBA")
+        d.rectangle((0,0,W,H),fill=(2,8,13,78))
+        d.rounded_rectangle((46,42,520,132),radius=12,fill=(0,5,10,210))
+        d.text((68,58),"RECONSTRUCTION DIAGRAM",font=font(34,True),fill=(244,177,91,255))
+        d.text((69,101),"source-grounded • not historical footage",font=font(19),fill=(205,215,217,255))
+        # Evidence inset and animated route from cell vent toward service corridor.
+        card=Image.new("RGBA",(evidence.width+28,evidence.height+28),(232,229,219,245))
+        card.alpha_composite(evidence.convert("RGBA"),(14,14))
+        cx=W-card.width-62;cy=190+round(math.sin(t*math.pi)*8)
+        im.alpha_composite(card,(cx,cy))
+        d.text((cx,cy-38),"DUMMY-HEAD EVIDENCE",font=font(21,True),fill=(240,235,222,255))
+        start=(620,690);turn=(900,510);end=(1240,390)
+        q=max(0,min(1,t/.78))
+        if q<.55:
+            u=q/.55;ex=start[0]+(turn[0]-start[0])*u;ey=start[1]+(turn[1]-start[1])*u
+            d.line((start[0],start[1],ex,ey),fill=(244,171,84,245),width=10)
+        else:
+            d.line((start[0],start[1],turn[0],turn[1]),fill=(244,171,84,245),width=10)
+            u=(q-.55)/.45;ex=turn[0]+(end[0]-turn[0])*u;ey=turn[1]+(end[1]-turn[1])*u
+            d.line((turn[0],turn[1],ex,ey),fill=(244,171,84,245),width=10)
+        d.ellipse((start[0]-10,start[1]-10,start[0]+10,start[1]+10),fill=(252,192,106,255))
+        d.text((start[0]-88,start[1]+26),"CELL VENT",font=font(20,True),fill=(246,237,218,255))
+        d.text((880,458),"UTILITY CORRIDOR",font=font(20,True),fill=(246,237,218,255))
+        d.rectangle((46,H-96,W-46,H-42),fill=(0,6,11,205))
+        d.text((68,H-83),"VISUALIZATION OF THE DOCUMENTED ESCAPE METHOD • NOT A CLAIM ABOUT THE MEN'S FINAL FATE",font=font(20),fill=(218,226,226,245))
+        return im.convert("RGB")
     write_raw_video(out,duration,frame)
 
 def synthesize_narration(out_wav:Path,out_srt:Path):
@@ -296,7 +311,7 @@ def synthesize_narration(out_wav:Path,out_srt:Path):
     gap=np.zeros(int(rate*.16),dtype=np.float32)
     for idx,(cid,text,source) in enumerate(NARRATION):
         chunks=[]
-        for _,_,audio in pipe(text,voice="af_heart",speed=.94,split_pattern=r"\n+"):
+        for _,_,audio in pipe(text,voice="am_michael",speed=.98,split_pattern=r"\n+"):
             chunks.append(np.asarray(audio,dtype=np.float32))
         if not chunks: raise RuntimeError(f"Kokoro returned no audio for {cid}")
         pcm=np.concatenate(chunks)
@@ -336,33 +351,41 @@ def main():
         download(meta["url"],raw);polish_image(raw,final);time.sleep(.8)
         meta.update({"localPath":str(final),"sha256":sha256(final)})
         sources.append(meta)
-    video_meta=commons_exact_video("File:Alcatraz San Francisco's Prison The Sound of the Cell Doors.webm")
-    broll_source=archive_dir/"alcatraz-cell-doors.webm"
-    download(video_meta["url"],broll_source,max_bytes=80*1024*1024)
-    video_meta.update({"localPath":str(broll_source),"sha256":sha256(broll_source)})
-    sources.append(video_meta)
-    (OUT/"sources.json").write_text(json.dumps({"schema":"open-media.sources.v2","items":sources},indent=2)+"\n")
+    video_specs=[
+      ("cell-doors-video","File:Alcatraz San Francisco's Prison The Sound of the Cell Doors.webm","alcatraz-cell-doors.webm"),
+      ("island-video","File:Alcatraz.webm","alcatraz-island.webm"),
+      ("isle-video","File:Alcatraz Isle (1).ogv","alcatraz-isle.ogv"),
+    ]
+    videos={}
+    for label,title,filename in video_specs:
+        meta=commons_exact_video(title,label)
+        target=archive_dir/filename
+        download(meta["url"],target,max_bytes=100*1024*1024)
+        meta.update({"localPath":str(target),"sha256":sha256(target)})
+        sources.append(meta);videos[label]=target;time.sleep(.7)
+    (OUT/"sources.json").write_text(json.dumps({"schema":"open-media.sources.v3","items":sources},indent=2)+"\n")
 
     wav=OUT/"narration.wav";srt=OUT/"subtitles.srt"
     audio_dur,timings=synthesize_narration(wav,srt)
     # Twelve sub-5-second beats: real B-roll leads motion rather than Ken Burns alone.
     duration=max(48.0,min(78.0,audio_dur+.35))
     slot=duration/12.0
-    src={x["id"]:Path(x["localPath"]) for x in sources if x["id"]!="cell-doors-video"}
+    src={x["id"]:Path(x["localPath"]) for x in sources if x["id"] not in videos}
     clips=[]
     plan=[
-      ("archive",src["island"],0.0),("broll",broll_source,0.0),("map",None,0.0),
-      ("archive",src["cells"],0.0),("evidence",src["dummy-head"],0.0),("broll",broll_source,6.0),
-      ("reconstruction",None,0.0),("archive",src["bay"],0.0),("broll",broll_source,12.0),
-      ("map",None,0.0),("archive",src["cellhouse"],0.0),("archive",src["guard"],0.0)
+      ("broll",videos["island-video"],0.0),("broll",videos["cell-doors-video"],0.0),("archive",src["cells"],0.0),
+      ("map",src["historic-map"],0.0),("broll",videos["isle-video"],0.0),("evidence",src["dummy-head"],0.0),
+      ("reconstruction",(src["cellhouse"],src["dummy-head"]),0.0),("broll",videos["cell-doors-video"],7.5),
+      ("archive",src["bay"],0.0),("map",src["historic-map"],0.0),("broll",videos["island-video"],8.5),
+      ("archive",src["guard"],0.0)
     ]
     for i,(kind,asset,start) in enumerate(plan):
         clip=TMP/f"scene-{i+1:02}.mp4"
         if kind=="archive": make_archive_clip(asset,clip,slot,i,kind)
         elif kind=="broll": make_broll_clip(asset,clip,slot,start)
-        elif kind=="map": make_map_clip(clip,slot)
+        elif kind=="map": make_map_clip(asset,clip,slot)
         elif kind=="evidence": make_evidence_clip(asset,clip,slot)
-        else: make_reconstruction_clip(clip,slot)
+        else: make_reconstruction_clip(asset[0],asset[1],clip,slot)
         clips.append(clip)
     concat=TMP/"concat.txt"
     concat.write_text("\n".join(f"file '{p.as_posix()}'" for p in clips)+"\n")
@@ -374,7 +397,7 @@ def main():
     srt_filter_path=str(srt).replace("\\","/").replace(":","\\\\:")
     subtitle_filter=f"subtitles='{srt_filter_path}':force_style='FontName=DejaVu Sans,FontSize=18,PrimaryColour=&H00FFFFFF,OutlineColour=&H90000000,BorderStyle=1,Outline=2,Shadow=0,MarginV=42'"
     audio_mix="[1:a]volume=1.0[n];[2:a]atrim=start=1:end=4,asetpts=PTS-STARTPTS,volume=0.12,adelay=14500:all=1[s];[n][s]amix=inputs=2:duration=first:normalize=0,loudnorm=I=-16:LRA=11:TP=-1.5[a]"
-    run([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(silent),"-i",str(wav),"-i",str(broll_source),
+    run([FFMPEG,"-hide_banner","-loglevel","error","-y","-i",str(silent),"-i",str(wav),"-i",str(videos["cell-doors-video"]),
          "-filter_complex",audio_mix,"-vf",subtitle_filter,"-map","0:v:0","-map","[a]","-c:v","libx264","-preset","medium","-crf","18",
          "-pix_fmt","yuv420p","-c:a","aac","-b:a","192k","-ar","48000",
          "-shortest","-movflags","+faststart",str(master)],timeout=2400)
@@ -388,12 +411,12 @@ def main():
       "schema":"open-media.alcatraz-audition-qa.v1",
       "master":{"path":str(master),"sha256":sha256(master),"bytes":master.stat().st_size},
       "probe":json.loads(probe.stdout),"cadence":cadence,
-      "visualRoles":{"archive":5,"realBroll":3,"map":2,"evidence":1,"reconstruction":1},
+      "visualRoles":{"archive":3,"realBroll":5,"map":2,"evidence":1,"reconstructionDiagram":1},
       "rightsSafeArchiveCount":len(sources),
-      "narration":{"engine":"Kokoro local CPU","voice":"af_heart","durationSec":audio_dur,"humanNaturalnessReview":"PENDING"},
+      "narration":{"engine":"Kokoro local CPU","voice":"am_michael","durationSec":audio_dur,"humanNaturalnessReview":"PENDING"},
       "benchmark":{"id":"youtube:XO1-4FH1X1I","sideBySideStatus":"PENDING"},
       "q9Status":"FAIL_UNTIL_HUMAN_REVIEW",
-      "knownGap":"No local AI-video reconstruction yet; this revision adds genuine licensed Alcatraz motion footage and authentic cell-door sound while keeping reconstruction explicitly labeled."
+      "knownGap":"No local AI-video reconstruction yet; this revision uses three distinct rights-checked Alcatraz motion sources, a real map-backed route treatment, and a source-image reconstruction diagram."
     }
     (OUT/"qa.json").write_text(json.dumps(qa,indent=2)+"\n")
     print(json.dumps(qa,indent=2))
