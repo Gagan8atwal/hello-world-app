@@ -1,0 +1,4 @@
+kokoro==0.9.4
+numpy==1.26.4
+pillow==10.4.0
+soundfile==0.12.1
