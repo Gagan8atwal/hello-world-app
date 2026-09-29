@@ -1,0 +1,29 @@
+name: Private Repo Checkout Probe
+
+on:
+  push:
+    branches:
+      - render-probe-20260928
+    paths:
+      - .render-probe/private-checkout.trigger
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout private Animora exact source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: Gagan8atwal/Animora-engine
+          ref: f7f4a3c5c0707eaf7afc61ed59c03a443bff768b
+          path: private-src
+          persist-credentials: false
+          fetch-depth: 1
+          token: ${{ github.token }}
+      - name: Verify exact private head
+        working-directory: private-src
+        run: test "$(git rev-parse HEAD)" = "f7f4a3c5c0707eaf7afc61ed59c03a443bff768b"
