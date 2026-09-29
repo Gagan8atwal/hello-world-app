@@ -159,7 +159,7 @@ def commons_exact_video(title:str,label:str)->dict:
     license_text=" | ".join(str(meta.get(k,{}).get("value","")) for k in ["LicenseShortName","UsageTerms","Copyrighted"])
     mime=str(info.get("mime") or "")
     url=info.get("url")
-    if not url or not mime.startswith("video/"): raise RuntimeError(f"Commons video unavailable: {title}")
+    if not url or not (mime.startswith("video/") or (mime=="application/ogg" and title.lower().endswith(".ogv"))): raise RuntimeError(f"Commons video unavailable: {title} mime={mime}")
     if not any(x in license_text.lower() for x in LICENSE_OK): raise RuntimeError(f"Commons video license rejected: {license_text}")
     return {"id":label,"title":page.get("title",title),"url":url,"mime":mime,
             "license":clean_html(license_text),
