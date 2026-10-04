@@ -3,7 +3,7 @@ export const ALOS_PROJECT_NAME = "On Alert / DOX / Case Zero";
 export const ALOS_REPOSITORY = "Gagan8atwal/hello-world-app";
 export const ALOS_BRANCH = "on-alert-media-temp";
 export const ALOS_ZERO_KEY_MODE = "deterministic-zero-key";
-export const ALOS_BROWSER_OWNER_SHA256 = "43e0adec2c7d53cb79dcf5ca3d4b4e2c66ccd16ed917eddbf3cab0cf73a214a1";
+export const ALOS_BROWSER_OWNER_SHA256 = "9f76e0dbb2b5d7dc1ce0c6fc172ad1204b7795adcb423d7a27c7f6bdbf090f56";
 export const ALOS_ADMISSION_SCHEMA = "alos.project-admission.v1";
 export const ALOS_OWNER_RESULT_SCHEMA = "alos.project-owner-result.v1";
 
