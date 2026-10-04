@@ -28,7 +28,7 @@
     "browser.interact"
   ],
   "browser": {
-    "ownerSha256": "b69fd7c0d1d0a552ab256340991e16055d7ed397973148ecadbe6d8e5af3f269",
+    "ownerSha256": "43e0adec2c7d53cb79dcf5ca3d4b4e2c66ccd16ed917eddbf3cab0cf73a214a1",
     "requireNonRoot": true,
     "requireNoNewPrivs": true,
     "forbidSandboxOverride": true,
