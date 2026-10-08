@@ -24,6 +24,7 @@ model = tokenizer = torch = server = None
 lock = threading.Lock()
 simulation = state = None
 GRAPH_ID = "fictional_biz_agents"
+OASIS_ROUNDS = 3  # genuine LLM rounds; exclude round-zero setup posts
 
 def stage(name, fn):
     start = time.monotonic()
@@ -150,11 +151,11 @@ def graph():
     store.set_meta("Sample case", "Synthetic missed call scenario",
                    {"entity_types":[{"name":"Person"}], "edge_types":[{"name":"asks"}]},
                    "2026-10-08T00:00:00Z")
-    n1=store.add_node("Fictional Customer", ["Person"], "Fictional person seeking a quote",
+    n1=store.add_node("Fictional Customer", ["Person"], "Fictional customer requesting a vehicle-repair quote",
                       {"age": 35, "role": "buyer", "interested_topics":["phone","repairs"]})
     n2=store.add_node("Fictional Shopkeeper", ["Person"], "Fictional small business owner",
                       {"age": 40, "role": "operator", "interested_topics":["business","service"]})
-    store.add_edge("asks", "Fictional Customer asks Fictional Shopkeeper about repairs", n1, n2)
+    store.add_edge("asks", "Fictional Customer asks Fictional Shopkeeper about vehicle repairs", n1, n2)
     store.add_episode("All business names and financial values are fictional.")
     assert store.get_statistics()["node_count"] == 2
     assert store.get_statistics()["edge_count"] == 1
@@ -168,7 +169,7 @@ def prepare():
     state=simulation.create_simulation("fictional_public_project", GRAPH_ID,
                                        enable_twitter=False, enable_reddit=True)
     state=simulation.prepare_simulation(state.simulation_id,
-            "Model two fictional people discussing missed-call lead capture over one round.",
+            "Model two fictional people discussing a missed repair-quote call in an auto shop.",
             "Synthetic data only; this is a bounded software test, not a business prediction.",
             defined_entity_types=["Person"], use_llm_for_profiles=False, parallel_profile_count=1)
     assert state.status.value == "ready", f"simulation not ready: {state.status}, {state.error}"
@@ -182,14 +183,18 @@ def prepare():
     time_cfg=data["time_config"]
     time_cfg.update({"agents_per_hour_min":2,"agents_per_hour_max":2,
                      "off_peak_activity_multiplier":1.0,"peak_activity_multiplier":1.0,
-                     "total_simulation_hours":1,"minutes_per_round":60})
+                     "total_simulation_hours":OASIS_ROUNDS,"minutes_per_round":60})
     assert len(data.get("agent_configs",[]))==2
     for a in data["agent_configs"]:
-        a["active_hours"]=[0]
+        a["active_hours"]=list(range(OASIS_ROUNDS))
         a["activity_level"]=1.0
+    # Upstream may mistakenly credit round-zero manual setup posts in round 1
+    # because the SQLite trace scanner begins with last_rowid=0. Disable
+    # setup posts: every counted action must be a genuine OASIS LLM action.
+    data.setdefault("event_config", {})["initial_posts"] = []
     config.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
     return {"simulation_id":state.simulation_id,"profiles":state.profiles_count,
-            "config_exists":True,"synthetic_lab_agent_activation": "2 agents at round 1 (00:00)",
+            "config_exists":True,"synthetic_lab_agent_activation": f"two agents across {OASIS_ROUNDS} genuine rounds, zero setup posts",
             "model_calls":counts["model_inferences"]}
 
 def oasis_one_round():
@@ -198,7 +203,7 @@ def oasis_one_round():
     out=path/"oasis.out"
     runner = source/"backend"/"scripts"/"run_parallel_simulation.py"
     args = [sys.executable, str(runner), "--config", str(path/"simulation_config.json"),
-            "--reddit-only", "--max-rounds", "1", "--no-wait"]
+            "--reddit-only", "--max-rounds", str(OASIS_ROUNDS), "--no-wait"]
     before_calls=counts["model_inferences"]
     p=subprocess.run(args, cwd=source/"backend", env=os.environ.copy(),
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=600)
@@ -207,6 +212,8 @@ def oasis_one_round():
     import runpy
     qa=runpy.run_path("lab/mirofish-evidence-qa.py")
     evidence=qa["inspect_agent_actions"](path)
+    print("OASIS_GENUINE_ACTION_PROOF=" + json.dumps(evidence, sort_keys=True), flush=True)
+    assert evidence["distinct_agent_ids"] >= 2, "Need model-driven actions by two distinct agents"
     # Record ONLY verified round >=1 OASIS actions as graph facts so native
     # retrieval can discover them. The local store uses exact SQL LIKE terms.
     from app.services.local_graph_store import LocalGraphStore
@@ -229,13 +236,16 @@ def oasis_one_round():
                         "Synthetic agent identifier from authentic OASIS action log")
                 store.add_edge("observed_action",
                     f"OASIS round {row['round']}: agent {agent_id} successfully performed "
-                    f"{row['action_type']}; source=actions.jsonl",
+                    f"{row['action_type']}; source=actions.jsonl. "
+                    "Separate source graph fact: Fictional Customer asks "
+                    "Fictional Shopkeeper about vehicle repairs. "
+                    "This trial did not measure actual customer phone calls or sales.",
                     actor_nodes[agent_id], run_node)
                 observed += 1
     assert observed == evidence["real_agent_actions"] >= 2
     assert store.search_edges("OASIS round"), "Verified actions not graph-searchable"
     assert counts["model_inferences"] > before_calls, "OASIS did not call real local model"
-    return {"one_round_requested":True,"action_evidence":evidence,
+    return {"rounds_requested":OASIS_ROUNDS,"action_evidence":evidence,
             "model_calls":counts["model_inferences"]}
 
 def native_report():
@@ -284,24 +294,23 @@ def native_report():
         "Return a two-section JSON outline specific to the fictional shop case."
     )
     report_mod.SECTION_SYSTEM_PROMPT_TEMPLATE = (
-        "You are MiroFish's simulation report writer, not a customer service chatbot.\n"
-        "Synthetic scenario: {simulation_requirement}\n"
-        "Report: {report_title}. Section: {section_title}. Summary: {report_summary}.\n"
-        "Evidence must come from the retrieval tools; no fabricated quotes, "
-        "no numerical business forecasts, no assertions about real customers.\n"
-        "For your FIRST THREE replies, make exactly one tool call in this syntax:\n"
+        "You are the factual report writer for an entirely FICTIONAL MiroFish/OASIS simulation.\n"
+        "Scenario: {simulation_requirement}\n"
+        "Report title: {report_title}. Current section: {section_title}. Summary: {report_summary}.\n"
+        "Source graph names are EXACTLY: Fictional Customer; Fictional Shopkeeper.\n"
+        "Use both names explicitly in your final narrative, faithfully distinguishing the hypothetical missed repair-quote phone call from what social agents actually did.\n"
+        "Facts about agent actions must come ONLY from successful genuine OASIS round evidence obtained with retrieval tools. Any real action is a social action, not an actual telephone contact or sale.\n"
+        "No percentages, customer-contact success rates, sales forecasts, imagined calls, invented counts, business results, or causal conclusions. Never treat counts of retrieval-tool calls as phone calls.\n"
+        "First THREE responses: request exactly one real graph retrieval, with this strict syntax:\n"
         "<tool_call>{{\"name\":\"quick_search\",\"parameters\":{{\"query\":\"OASIS round\"}}}}</tool_call>\n"
-        "Other valid tool names: panorama_search, insight_forge. "
-        "Do NOT call interview_agents because the simulation is no longer running.\n"
-        "After three real tool observations, start your reply with 'Final Answer:' "
-        "then write 2 grounded paragraphs with concrete scenario entities, observed "
-        "agent action types, limits and uncertainty. No headings or apologies.\n"
-        "Never say 'I can help', 'tool limit', 'more information', or request input."
+        "You may use panorama_search for a different graph perspective. Do not use interview_agents: this simulation is no longer live.\n"
+        "AFTER the three actual retrieval responses, reply with Final Answer: and write at least two coherent, short factual paragraphs using the two exact fictional names, the observed OASIS action types and the limitations of the simulation. No Markdown headings or apologies.\n"
+        "Never quote content not actually retrieved. Never state any simulated predictions as real-world results."
     )
     report_mod.SECTION_USER_PROMPT_TEMPLATE = (
-        "Write about {section_title}. Other sections: {previous_content}\n"
-        "Step 1: call quick_search, panorama_search or insight_forge using "
-        "the exact <tool_call> JSON block above. Do not write a final answer yet."
+        "Draft the report section {section_title}, distinct from earlier sections: {previous_content}\n"
+        "Both known fictional roles are Fictional Customer and Fictional Shopkeeper. After verifying graph events via the real tool, include their exact names in the report. Evidence only; no statistics about phone-call handling, customers or sales.\n"
+        "First output ONE <tool_call> request to retrieve OASIS round facts. Do not give your final answer until THREE real retrieval tools have run."
     )
     # Qwen needs an executable example at every retry, not upstream's vague
     # natural-language hints that fail the actual <tool_call> parser.
@@ -311,20 +320,23 @@ def native_report():
     # JSON braces while retaining the separately formatted counter fields.
     retry_example = retry_example.replace("{", "{{").replace("}", "}}")
     report_mod.REACT_INSUFFICIENT_TOOLS_MSG = (
-        "Only {tool_calls_count}/{min_tool_calls} tool calls completed. "
-        "Do not answer yet. Reply ONLY with " + retry_example
+        "More REPORT-WRITING graph retrieval operations are necessary, "
+        "not customer telephone calls. Reply with ONLY " + retry_example
     )
     report_mod.REACT_INSUFFICIENT_TOOLS_MSG_ALT = (
-        "Only {tool_calls_count}/{min_tool_calls} tool calls completed. "
-        "Your next reply must be ONLY " + retry_example
+        "Additional GRAPH RETRIEVAL is mandatory. These are not business "
+        "contact counts. Reply ONLY with " + retry_example
     )
     report_mod.REACT_UNUSED_TOOLS_HINT = ""
     report_mod.REACT_OBSERVATION_TEMPLATE = (
-        "Real {tool_name} retrieval: {result}\\n"
-        "Completed {tool_calls_count}/{max_tool_calls} calls. {used_tools_str}. {unused_hint}\\n"
-        "If you have made fewer than 3 calls, reply ONLY with "
-        + retry_example +
-        " Otherwise write Final Answer: followed by grounded evidence paragraphs."
+        "VERIFIED GRAPH EVIDENCE ({tool_name}):\\n{result}\\n"
+        "This is actual simulation graph evidence. Do not infer any business "
+        "contact rates, telephone call attempts or customer conversions "
+        "from the software retrieval counter. For further evidence reply ONLY "
+        "with " + retry_example +
+        " Once the required three retrievals have executed, start Final Answer: "
+        "and write two short paragraphs mentioning Fictional Customer, "
+        "Fictional Shopkeeper, observed action types, and uncertainty."
     )
     # The upstream ReACT loop has only five turns for three retrieval calls
     # plus a final answer. Small CPU models often waste turns on prose.
@@ -342,18 +354,16 @@ def native_report():
     report_mod.ReportAgent._generate_section_react = namespace["_generate_section_react"]
 
     report_mod.REACT_FORCE_FINAL_MSG = (
-        "Write Final Answer: followed by a factual, case-specific 120-word "
-        "analysis of the fictional shop's missed call, the two agent posts, "
-        "and the severe limits of this one-round synthetic simulation. "
-        "Do not write headings or mention tools or request clarification."
+        "Write Final Answer: followed by a factual section. The scenario names are Fictional Customer and Fictional Shopkeeper; use them verbatim, and describe only actions actually present in the retrieved OASIS graph facts. The missed call is a FICTIONAL premise, not a recorded telephone interaction. No percentages, no 3-of-5 call counts, no business rates or unsupported forecasts. Mention the severe limits of this small simulated trial. No headings."
     )
     requirement = (
-        "Fictional Customer asked Fictional Shopkeeper about phone repairs. "
-        "A fictional auto-repair shop missed a customer phone call. "
-        f"An actual OASIS round completed with {action_evidence['real_agent_actions']} "
-        f"successful agent actions of types {', '.join(action_evidence['action_types'])} "
-        f"from {action_evidence['distinct_agent_ids']} agents. "
-        "This bounded one-round synthetic experiment cannot predict revenues."
+        "Verified scenario graph: Fictional Customer asks Fictional Shopkeeper "
+        "about vehicle repairs. Hypothetical premise: an auto-repair shop "
+        "missed a customer phone call. The telephone event is not observed. "
+        f"Genuine OASIS actions recorded: {action_evidence['real_agent_actions']} "
+        f"successful actions of types {', '.join(action_evidence['action_types'])} "
+        f"by {action_evidence['distinct_agent_ids']} distinct agents. "
+        "This tiny synthetic trial contains no sales or customer-contact measurements."
     )
     agent = report_mod.ReportAgent(
         graph_id=GRAPH_ID, simulation_id=state.simulation_id,
@@ -387,9 +397,12 @@ def native_report():
         assert len(relevant) >= 3, f"Section {idx} lacks three real tool results"
         assert any("OASIS round" in str(r.get("details", {}).get("result", ""))
                    for r in relevant), f"Section {idx} did not retrieve verified OASIS action evidence"
+        assert all("Tool execution failed:" not in str(r.get("details", {}).get("result", ""))
+                   for r in relevant), f"Section {idx} used failed retrieval results"
     quality = qa["inspect_report"](body)
-    assert "Fictional Customer" in body or "Fictional Shopkeeper" in body, (
-        "Report lacks names from the source graph")
+    assert "Fictional Customer" in body and "Fictional Shopkeeper" in body, (
+        "Report lacks exact names from the source graph")
+    assert counts["endpoint_errors"] == 0, "Local Qwen endpoint errors occurred"
     return {"chars": len(body), "report_quality": quality,
             "native_section_count": len(sections),
             "native_tool_calls": len(tool_calls),
@@ -403,8 +416,8 @@ try:
             if stage("mirofish_real_llm_client", llm_client):
                 if stage("graph_storage", graph):
                     if stage("simulation_preparation", prepare):
-                        stage("oasis_real_agents", oasis_one_round)
-                        stage("mirofish_report", native_report)
+                        if stage("oasis_real_agents", oasis_one_round):
+                            stage("mirofish_report", native_report)
     required=["security","upstream","real_open_model","loopback_api",
               "mirofish_real_llm_client","graph_storage","simulation_preparation",
               "oasis_real_agents","mirofish_report"]
