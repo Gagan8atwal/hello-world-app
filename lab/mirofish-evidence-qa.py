@@ -23,7 +23,15 @@ def inspect_agent_actions(sim_dir):
     ]
     assert round_starts, "No real simulation round started"
     assert round_ends, "No real simulation round completed"
+    # Upstream may replay round-zero setup posts from the SQLite trace during
+    # the first LLM round. This lab disables initial_posts; fail closed if
+    # any setup action exists instead of miscrediting it as model-driven work.
+    round_zero_actions = [r for r in entries if r.get("action_type")
+                          and int(r.get("round") or 0) == 0]
+    assert not round_zero_actions, "Round-zero setup posts could be counted as LLM actions"
     assert real_actions, "No genuine agent action after round 0 (only setup events)"
+    assert len({r["agent_id"] for r in real_actions}) >= 2, (
+        "Fewer than two distinct OASIS agents produced genuine actions")
     return {"round_starts": len(round_starts), "round_ends": len(round_ends),
             "real_agent_actions": len(real_actions),
             "action_types": sorted(set(str(x["action_type"]) for x in real_actions)),
@@ -40,5 +48,15 @@ def inspect_report(markdown):
     assert not placeholders.intersection(normalized), "Report has generated placeholder headings"
     assert re.search(r"\b(missed|call|phone|shop|lead|customer)\b", markdown, re.I), \
         "Generated report lacks any case-specific language"
+    assert "Fictional Customer" in markdown and "Fictional Shopkeeper" in markdown, (
+        "Native report did not ground its content in both source-graph entities")
+    # Retrieval progress previously appeared as 3/5 and the small model
+    # invented 60% customer contact conversion from that diagnostic counter.
+    # No business measurements exist in this synthetic trial.
+    assert not re.search(r"\\b(?:success|conversion|contact)\\s+rate\\b|"
+                         r"\\b(?:three|3)\\s+(?:out of|of)\\s+(?:five|5)\\b|"
+                         r"\\b(?:attempted contacts|five callers)\\b|"
+                         r"\\b\\d+(?:\\.\\d+)?\\s*%|\\b\\d+(?:\\.\\d+)?\\s+percent\\b",
+                         markdown, re.I), "Unsupported business conversion metrics in report"
     return {"characters": len(markdown), "headings": len(heads),
             "distinct_headings": len(set(normalized)), "case_specific_terms": True}
