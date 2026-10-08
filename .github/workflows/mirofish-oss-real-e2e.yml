@@ -1,0 +1,71 @@
+name: MiroFish OSS Real Agent E2E (public runner)
+
+on:
+  push:
+    branches: [lab/mirofish-public-e2e-20261008]
+    paths:
+      - lab/mirofish-open-oss-e2e.py
+      - .github/workflows/mirofish-oss-real-e2e.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirofish-oss-real-e2e-free
+  cancel-in-progress: true
+
+jobs:
+  oss-simulation:
+    name: Real offline model + MiroFish agent simulation
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout standalone public-OSS test
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Python 3.11 (upstream compatible)
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Verify no production or billing dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile lab/mirofish-open-oss-e2e.py
+          python - <<'PY'
+          import os
+          for key in ("ALOS_GITHUB_SOURCE_TOKEN","OPENAI_API_KEY","KAGGLE_API_TOKEN"):
+              assert not os.environ.get(key), f"Forbidden environment key: {key}"
+          print("Public, synthetic-only test admitted; no production secrets.")
+          PY
+      - name: Install pinned upstream MiroFish environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          git init -q /tmp/mirofish-deps
+          git -C /tmp/mirofish-deps remote add origin https://github.com/shayswrld/mirofish.git
+          git -C /tmp/mirofish-deps fetch --depth 1 origin 8d4eea4dfa981ecd23c3b385953b4085dfd9b6ca
+          git -C /tmp/mirofish-deps checkout -q FETCH_HEAD
+          python -m pip install -r /tmp/mirofish-deps/backend/requirements.txt
+          python -m pip install 'transformers>=4.50,<5' 'accelerate>=1,<2'
+          python -m pip check
+      - name: Execute real local model + simulation + report
+        shell: bash
+        timeout-minutes: 45
+        run: |
+          set -euo pipefail
+          python lab/mirofish-open-oss-e2e.py | tee mirofish-run.log
+      - name: Upload audit trail and failure evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: mirofish-public-oss-e2e-evidence
+          path: |
+            mirofish-real-e2e.json
+            mirofish-synthetic-report.md
+            mirofish-run.log
+          if-no-files-found: ignore
+          retention-days: 2
