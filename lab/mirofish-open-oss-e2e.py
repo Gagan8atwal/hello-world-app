@@ -307,7 +307,7 @@ def native_report():
     # natural-language hints that fail the actual <tool_call> parser.
     retry_example = ('<tool_call>{"name":"quick_search",'
                      '"parameters":{"query":"OASIS round"}}</tool_call>')
-    report_mod.REACT_INSUFFICIENT_TOOLS_MSG = (
+    # These strings are subsequently interpolated using str.format(). Escape\n    # JSON braces while retaining the separately formatted counter fields.\n    retry_example = retry_example.replace("{", "{{").replace("}", "}}")\n    report_mod.REACT_INSUFFICIENT_TOOLS_MSG = (
         "Only {tool_calls_count}/{min_tool_calls} tool calls completed. "
         "Do not answer yet. Reply ONLY with " + retry_example
     )
