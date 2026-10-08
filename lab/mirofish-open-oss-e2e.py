@@ -272,6 +272,21 @@ def native_report():
         "followed by substantive paragraphs grounded in the above results. "
         "Do not mention tools or apologize."
     )
+    # The upstream ReACT loop has only five turns for three retrieval calls
+    # plus a final answer. Small CPU models often waste turns on prose.
+    # Extend its iteration budget without weakening the retrieval evidence gate.
+    original_section_method = report_mod.ReportAgent._generate_section_react
+    import inspect
+    source = inspect.getsource(original_section_method)
+    assert "max_iterations = 5  # Max iterations" in source
+    namespace = {}
+    patched_source = source.replace("max_iterations = 5  # Max iterations",
+                                    "max_iterations = 10  # Lab-only retry budget")
+    patched_source = __import__("textwrap").dedent(patched_source)
+    exec(compile(patched_source, "<lab-report-iteration-adapter>", "exec"),
+         original_section_method.__globals__, namespace)
+    report_mod.ReportAgent._generate_section_react = namespace["_generate_section_react"]
+
     report_mod.REACT_FORCE_FINAL_MSG = (
         "Write Final Answer: followed by a factual, case-specific 120-word "
         "analysis of the fictional shop's missed call, the two agent posts, "
