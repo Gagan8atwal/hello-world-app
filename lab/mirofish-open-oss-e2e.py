@@ -207,6 +207,33 @@ def oasis_one_round():
     import runpy
     qa=runpy.run_path("lab/mirofish-evidence-qa.py")
     evidence=qa["inspect_agent_actions"](path)
+    # Record ONLY verified round >=1 OASIS actions as graph facts so native
+    # retrieval can discover them. The local store uses exact SQL LIKE terms.
+    from app.services.local_graph_store import LocalGraphStore
+    store = LocalGraphStore(GRAPH_ID)
+    run_node = store.add_node("OASIS Verified Round", ["Run"],
+                              "Genuine OASIS action-log evidence")
+    actor_nodes = {}
+    observed = 0
+    for action_file in path.rglob("actions.jsonl"):
+        for line in action_file.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if (row.get("action_type") and int(row.get("round") or 0) >= 1
+                    and isinstance(row.get("agent_id"), int) and row.get("success") is True):
+                agent_id = row["agent_id"]
+                if agent_id not in actor_nodes:
+                    actor_nodes[agent_id] = store.add_node(
+                        f"OASIS Agent {agent_id}", ["AgentEvidence"],
+                        "Synthetic agent identifier from authentic OASIS action log")
+                store.add_edge("observed_action",
+                    f"OASIS round {row['round']}: agent {agent_id} successfully performed "
+                    f"{row['action_type']}; source=actions.jsonl",
+                    actor_nodes[agent_id], run_node)
+                observed += 1
+    assert observed == evidence["real_agent_actions"] >= 2
+    assert store.search_edges("OASIS round"), "Verified actions not graph-searchable"
     assert counts["model_inferences"] > before_calls, "OASIS did not call real local model"
     return {"one_round_requested":True,"action_evidence":evidence,
             "model_calls":counts["model_inferences"]}
@@ -226,6 +253,19 @@ def native_report():
     assert action_evidence["real_agent_actions"] >= 2
 
     from app.services import report_agent as report_mod
+
+    # Normalize upstream's documented <tool> response to its actual parser tag,
+    # without inventing a call or completion. Actual Qwen output is preserved.
+    original_parser = report_mod.ReportAgent._parse_tool_calls
+    def parse_upstream_compatible(self, response):
+        parsed = original_parser(self, response)
+        if parsed:
+            return parsed
+        if "<tool>" in response and "</tool>" in response:
+            return original_parser(self, response.replace("<tool>", "<tool_call>")
+                                          .replace("</tool>", "</tool_call>"))
+        return []
+    report_mod.ReportAgent._parse_tool_calls = parse_upstream_compatible
 
     # Upstream advertises <tool> blocks but only parses <tool_call>. The
     # tiny local model also receives >3k tokens of unrelated generic instructions.
@@ -250,7 +290,7 @@ def native_report():
         "Evidence must come from the retrieval tools; no fabricated quotes, "
         "no numerical business forecasts, no assertions about real customers.\n"
         "For your FIRST THREE replies, make exactly one tool call in this syntax:\n"
-        "<tool_call>{{\"name\":\"quick_search\",\"parameters\":{{\"query\":\"Fictional Customer Fictional Shopkeeper phone repairs\"}}}}</tool_call>\n"
+        "<tool_call>{{\"name\":\"quick_search\",\"parameters\":{{\"query\":\"OASIS round\"}}}}</tool_call>\n"
         "Other valid tool names: panorama_search, insight_forge. "
         "Do NOT call interview_agents because the simulation is no longer running.\n"
         "After three real tool observations, start your reply with 'Final Answer:' "
@@ -263,14 +303,25 @@ def native_report():
         "Step 1: call quick_search, panorama_search or insight_forge using "
         "the exact <tool_call> JSON block above. Do not write a final answer yet."
     )
+    # Qwen needs an executable example at every retry, not upstream's vague
+    # natural-language hints that fail the actual <tool_call> parser.
+    retry_example = ('<tool_call>{"name":"quick_search",'
+                     '"parameters":{"query":"OASIS round"}}</tool_call>')
+    report_mod.REACT_INSUFFICIENT_TOOLS_MSG = (
+        "Only {tool_calls_count}/{min_tool_calls} tool calls completed. "
+        "Do not answer yet. Reply ONLY with " + retry_example
+    )
+    report_mod.REACT_INSUFFICIENT_TOOLS_MSG_ALT = (
+        "Only {tool_calls_count}/{min_tool_calls} tool calls completed. "
+        "Your next reply must be ONLY " + retry_example
+    )
+    report_mod.REACT_UNUSED_TOOLS_HINT = ""
     report_mod.REACT_OBSERVATION_TEMPLATE = (
-        "ACTUAL retrieval result from {tool_name}:\n{result}\n"
-        "Executed tool calls: {tool_calls_count}/{max_tool_calls}. Used: {used_tools_str}. "
-        "{unused_hint}\n"
-        "If fewer than 3 calls, issue ONE <tool_call> block with quick_search "
-        "or panorama_search. If at least 3 calls, write 'Final Answer:' "
-        "followed by substantive paragraphs grounded in the above results. "
-        "Do not mention tools or apologize."
+        "Real {tool_name} retrieval: {result}\\n"
+        "Completed {tool_calls_count}/{max_tool_calls} calls. {used_tools_str}. {unused_hint}\\n"
+        "If you have made fewer than 3 calls, reply ONLY with "
+        + retry_example +
+        " Otherwise write Final Answer: followed by grounded evidence paragraphs."
     )
     # The upstream ReACT loop has only five turns for three retrieval calls
     # plus a final answer. Small CPU models often waste turns on prose.
@@ -306,6 +357,10 @@ def native_report():
         simulation_requirement=requirement)
     before = counts["model_inferences"]
     report = agent.generate_report(report_id="public_oss_report")
+    # Export upstream's genuine section-by-section trace, including failed QA.
+    pathlib.Path("mirofish-report-agent-log.jsonl").write_text(
+        pathlib.Path(agent.report_logger.log_file_path).read_text(encoding="utf-8"),
+        encoding="utf-8")
     assert report.status.value == "completed", (
         f"report status={report.status}; reason={report.error}")
     assert counts["model_inferences"] > before, "Native report did not use local Qwen"
@@ -323,6 +378,12 @@ def native_report():
     assert len(tool_calls) >= 3 * len(sections), (
         f"Only {len(tool_calls)} real native retrieval calls for {len(sections)} sections")
     assert len(tool_results) >= len(tool_calls), "Retrieval tool results missing"
+    for sec in sections:
+        idx = sec.get("section_index")
+        relevant = [r for r in tool_results if r.get("section_index") == idx]
+        assert len(relevant) >= 3, f"Section {idx} lacks three real tool results"
+        assert any("OASIS round" in str(r.get("details", {}).get("result", ""))
+                   for r in relevant), f"Section {idx} did not retrieve verified OASIS action evidence"
     quality = qa["inspect_report"](body)
     assert "Fictional Customer" in body or "Fictional Shopkeeper" in body, (
         "Report lacks names from the source graph")
