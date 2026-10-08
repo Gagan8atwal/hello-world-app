@@ -78,16 +78,20 @@ def infer(messages, json_mode=False):
     conv = []
     if json_mode:
         conv.append({"role": "system", "content": "You must respond with one valid JSON object. No markdown."})
-    for m in messages[-9:]:
+    # Preserve the report's system instructions across tool observations. The original
+    # sliding window dropped them once a section needed several retrieval calls.
+    recent = ([messages[0]] + messages[-8:]) if len(messages) > 9 else messages
+    for m in recent:
         role = m.get("role")
         text = m.get("content", "")
         if not isinstance(text, str): text = json.dumps(text)
-        conv.append({"role": role if role in ("system","user","assistant") else "user", "content": text[:7000]})
+        conv.append({"role": role if role in ("system","user","assistant") else "user",
+                     "content": text[:1800]})
     with lock:
         input_ids = tokenizer.apply_chat_template(conv, tokenize=True, add_generation_prompt=True,
                                                   return_tensors="pt")[:, -3500:]
         with torch.inference_mode():
-            output = model.generate(input_ids, max_new_tokens=256, do_sample=False,
+            output = model.generate(input_ids, max_new_tokens=480, do_sample=False,
                                     pad_token_id=tokenizer.eos_token_id)
         decoded = tokenizer.decode(output[0][input_ids.shape[-1]:], skip_special_tokens=True).strip()
         counts["model_inferences"] += 1
@@ -208,19 +212,111 @@ def oasis_one_round():
             "model_calls":counts["model_inferences"]}
 
 def native_report():
+    """Exercise the genuine pinned MiroFish ReportAgent with CPU-model prompts.
+
+    This is a test-only prompt compatibility adapter: it does not replace the
+    upstream outline planner, ReACT loop, retrieval tools, or report assembly.
+    Every completion still comes from the locally loaded Qwen model.
+    """
     assert state is not None
-    from app.services.report_agent import ReportAgent
-    agent=ReportAgent(graph_id=GRAPH_ID,simulation_id=state.simulation_id,
-        simulation_requirement="Analyze this fictional missed-call discussion without empirical claims.")
-    report=agent.generate_report(report_id="public_oss_report")
-    text=report.markdown_content or ""
-    assert report.status.value == "completed", f"report status={report.status}; reason={report.error}"
-    pathlib.Path("mirofish-synthetic-report.md").write_text(text, encoding="utf-8")
     import runpy
-    qa=runpy.run_path("lab/mirofish-evidence-qa.py")
-    quality=qa["inspect_report"](text)
-    return {"chars":len(text),"report_quality":quality,
-            "model_inferences":counts["model_inferences"]}
+    qa = runpy.run_path("lab/mirofish-evidence-qa.py")
+    sim_dir = pathlib.Path(simulation.SIMULATION_DATA_DIR) / state.simulation_id
+    action_evidence = qa["inspect_agent_actions"](sim_dir)
+    assert action_evidence["real_agent_actions"] >= 2
+
+    from app.services import report_agent as report_mod
+
+    # Upstream advertises <tool> blocks but only parses <tool_call>. The
+    # tiny local model also receives >3k tokens of unrelated generic instructions.
+    # Limit the task to two evidence-bound sections and an exact parser contract.
+    report_mod.PLAN_SYSTEM_PROMPT = (
+        "You write a factual report about a FICTIONAL agent simulation. "
+        "Return ONLY valid JSON with keys title, summary, sections. "
+        "sections must be a list of exactly two objects with title and description. "
+        "Use specific titles about the missed customer call, the shop and the agent posts. "
+        "Never use 'Section Title', generic headings, or claims of real-world outcomes."
+    )
+    report_mod.PLAN_USER_PROMPT_TEMPLATE = (
+        "Simulation: {simulation_requirement}\n"
+        "Entities: {total_nodes}; edges: {total_edges}; agents: {total_entities}.\n"
+        "Recorded graph facts: {related_facts_json}\n"
+        "Return a two-section JSON outline specific to the fictional shop case."
+    )
+    report_mod.SECTION_SYSTEM_PROMPT_TEMPLATE = (
+        "You are MiroFish's simulation report writer, not a customer service chatbot.\n"
+        "Synthetic scenario: {simulation_requirement}\n"
+        "Report: {report_title}. Section: {section_title}. Summary: {report_summary}.\n"
+        "Evidence must come from the retrieval tools; no fabricated quotes, "
+        "no numerical business forecasts, no assertions about real customers.\n"
+        "For your FIRST THREE replies, make exactly one tool call in this syntax:\n"
+        "<tool_call>{{\"name\":\"quick_search\",\"parameters\":{{\"query\":\"Fictional Customer Fictional Shopkeeper phone repairs\"}}}}</tool_call>\n"
+        "Other valid tool names: panorama_search, insight_forge. "
+        "Do NOT call interview_agents because the simulation is no longer running.\n"
+        "After three real tool observations, start your reply with 'Final Answer:' "
+        "then write 2 grounded paragraphs with concrete scenario entities, observed "
+        "agent action types, limits and uncertainty. No headings or apologies.\n"
+        "Never say 'I can help', 'tool limit', 'more information', or request input."
+    )
+    report_mod.SECTION_USER_PROMPT_TEMPLATE = (
+        "Write about {section_title}. Other sections: {previous_content}\n"
+        "Step 1: call quick_search, panorama_search or insight_forge using "
+        "the exact <tool_call> JSON block above. Do not write a final answer yet."
+    )
+    report_mod.REACT_OBSERVATION_TEMPLATE = (
+        "ACTUAL retrieval result from {tool_name}:\n{result}\n"
+        "Executed tool calls: {tool_calls_count}/{max_tool_calls}. Used: {used_tools_str}. "
+        "{unused_hint}\n"
+        "If fewer than 3 calls, issue ONE <tool_call> block with quick_search "
+        "or panorama_search. If at least 3 calls, write 'Final Answer:' "
+        "followed by substantive paragraphs grounded in the above results. "
+        "Do not mention tools or apologize."
+    )
+    report_mod.REACT_FORCE_FINAL_MSG = (
+        "Write Final Answer: followed by a factual, case-specific 120-word "
+        "analysis of the fictional shop's missed call, the two agent posts, "
+        "and the severe limits of this one-round synthetic simulation. "
+        "Do not write headings or mention tools or request clarification."
+    )
+    requirement = (
+        "Fictional Customer asked Fictional Shopkeeper about phone repairs. "
+        "A fictional auto-repair shop missed a customer phone call. "
+        f"An actual OASIS round completed with {action_evidence['real_agent_actions']} "
+        f"successful agent actions of types {', '.join(action_evidence['action_types'])} "
+        f"from {action_evidence['distinct_agent_ids']} agents. "
+        "This bounded one-round synthetic experiment cannot predict revenues."
+    )
+    agent = report_mod.ReportAgent(
+        graph_id=GRAPH_ID, simulation_id=state.simulation_id,
+        simulation_requirement=requirement)
+    before = counts["model_inferences"]
+    report = agent.generate_report(report_id="public_oss_report")
+    assert report.status.value == "completed", (
+        f"report status={report.status}; reason={report.error}")
+    assert counts["model_inferences"] > before, "Native report did not use local Qwen"
+    body = report.markdown_content or ""
+    pathlib.Path("mirofish-synthetic-report.md").write_text(body, encoding="utf-8")
+
+    # Native report tool activity must also be recorded, not just generation logs.
+    records = [json.loads(line) for line in
+               pathlib.Path(agent.report_logger.log_file_path).read_text(
+                   encoding="utf-8").splitlines() if line.strip()]
+    tool_calls = [r for r in records if r.get("action") == "tool_call"]
+    tool_results = [r for r in records if r.get("action") == "tool_result"]
+    sections = [r for r in records if r.get("action") == "section_complete"]
+    assert len(sections) >= 2, "Native MiroFish report sections missing"
+    assert len(tool_calls) >= 3 * len(sections), (
+        f"Only {len(tool_calls)} real native retrieval calls for {len(sections)} sections")
+    assert len(tool_results) >= len(tool_calls), "Retrieval tool results missing"
+    quality = qa["inspect_report"](body)
+    assert "Fictional Customer" in body or "Fictional Shopkeeper" in body, (
+        "Report lacks names from the source graph")
+    return {"chars": len(body), "report_quality": quality,
+            "native_section_count": len(sections),
+            "native_tool_calls": len(tool_calls),
+            "native_tool_results": len(tool_results),
+            "action_evidence": action_evidence,
+            "report_model_inferences": counts["model_inferences"] - before}
 
 try:
     if stage("security", check_safe) and stage("upstream", get_upstream):
