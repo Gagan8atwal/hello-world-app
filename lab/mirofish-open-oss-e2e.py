@@ -172,8 +172,21 @@ def prepare():
     folder=pathlib.Path(simulation.SIMULATION_DATA_DIR)/state.simulation_id
     config=folder/"simulation_config.json"
     assert config.exists()
+    # One-round E2E must ACTIVATE real agents; first round is simulated 00:00.
+    # Explicit synthetic QA overrides do not replace the upstream MiroFish engine.
+    data=json.loads(config.read_text(encoding="utf-8"))
+    time_cfg=data["time_config"]
+    time_cfg.update({"agents_per_hour_min":2,"agents_per_hour_max":2,
+                     "off_peak_activity_multiplier":1.0,"peak_activity_multiplier":1.0,
+                     "total_simulation_hours":1,"minutes_per_round":60})
+    assert len(data.get("agent_configs",[]))==2
+    for a in data["agent_configs"]:
+        a["active_hours"]=[0]
+        a["activity_level"]=1.0
+    config.write_text(json.dumps(data,ensure_ascii=False,indent=2),encoding="utf-8")
     return {"simulation_id":state.simulation_id,"profiles":state.profiles_count,
-            "config_exists":True,"model_calls":counts["model_inferences"]}
+            "config_exists":True,"synthetic_lab_agent_activation": "2 agents at round 1 (00:00)",
+            "model_calls":counts["model_inferences"]}
 
 def oasis_one_round():
     assert state is not None
@@ -182,14 +195,16 @@ def oasis_one_round():
     runner = source/"backend"/"scripts"/"run_parallel_simulation.py"
     args = [sys.executable, str(runner), "--config", str(path/"simulation_config.json"),
             "--reddit-only", "--max-rounds", "1", "--no-wait"]
+    before_calls=counts["model_inferences"]
     p=subprocess.run(args, cwd=source/"backend", env=os.environ.copy(),
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=600)
     out.write_text(p.stdout[-20000:])
     assert p.returncode == 0, f"OASIS process exited {p.returncode}: {p.stdout[-2000:]}"
-    files=list(path.rglob("actions.jsonl"))
-    entries=sum(len(f.read_text().splitlines()) for f in files)
-    assert entries > 0, "No genuine OASIS agent actions in action logs"
-    return {"one_round_requested":True,"action_lines":entries,
+    import runpy
+    qa=runpy.run_path("lab/mirofish-evidence-qa.py")
+    evidence=qa["inspect_agent_actions"](path)
+    assert counts["model_inferences"] > before_calls, "OASIS did not call real local model"
+    return {"one_round_requested":True,"action_evidence":evidence,
             "model_calls":counts["model_inferences"]}
 
 def native_report():
@@ -200,9 +215,12 @@ def native_report():
     report=agent.generate_report(report_id="public_oss_report")
     text=report.markdown_content or ""
     assert report.status.value == "completed", f"report status={report.status}; reason={report.error}"
-    assert len(text) > 150
     pathlib.Path("mirofish-synthetic-report.md").write_text(text, encoding="utf-8")
-    return {"chars":len(text),"model_inferences":counts["model_inferences"]}
+    import runpy
+    qa=runpy.run_path("lab/mirofish-evidence-qa.py")
+    quality=qa["inspect_report"](text)
+    return {"chars":len(text),"report_quality":quality,
+            "model_inferences":counts["model_inferences"]}
 
 try:
     if stage("security", check_safe) and stage("upstream", get_upstream):
