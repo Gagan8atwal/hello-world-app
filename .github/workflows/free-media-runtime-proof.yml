@@ -1,0 +1,80 @@
+name: Free Media Runtime Proof (no private sources)
+
+on:
+  push:
+    branches:
+      - lab/free-creator-pikopop-runtime-20261008
+    paths:
+      - '.github/workflows/free-media-runtime-proof.yml'
+      - 'ci/free-media/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-media-runtime-proof
+  cancel-in-progress: true
+
+jobs:
+  prove-free-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout isolated PUBLIC test files (never private engines)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Verify isolated zero-dollar runtime policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "Gagan8atwal/hello-world-app"
+          test "$GITHUB_REF_NAME" = "lab/free-creator-pikopop-runtime-20261008"
+          test -z "${PRIVATE_ENGINE_SOURCE_TOKEN:-}"
+          printf '%s\n' 'PUBLIC_RUNNER_ONLY_NO_PRIVATE_SOURCE_NO_PAID_PROVIDER'
+      - name: Install open-source Blender EEVEE and FFmpeg runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq -o Acquire::Retries=3
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            blender ffmpeg libegl1 libgl1 libgl1-mesa-dri libgbm1 \
+            libx11-6 libxrender1 libxext6 libxkbcommon0 xvfb xauth
+          ldconfig -p | grep -F 'libEGL.so.1'
+          blender --version | head -n 2
+          ffmpeg -version | head -n 1
+      - name: Render actual EEVEE pixels on headless software GL
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p qa-proof
+          export LIBGL_ALWAYS_SOFTWARE=1
+          xvfb-run -a -s "-screen 0 1920x1080x24 +extension GLX +render -noreset" \
+            blender --background --factory-startup --python-exit-code 1 \
+            --python ci/free-media/blender-eevee-smoke.py
+          test -s qa-proof/eevee-smoke.png
+      - name: Decode real FFmpeg video+audio and verify frame count
+        shell: bash
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -nostdin -loglevel error -y \
+            -f lavfi -i 'testsrc2=size=256x144:rate=24:duration=8' \
+            -f lavfi -i 'sine=frequency=320:sample_rate=48000:duration=8' \
+            -map 0:v:0 -map 1:a:0 -c:v libx264 -preset ultrafast -pix_fmt yuv420p \
+            -c:a aac -b:a 96k -t 8 qa-proof/ffmpeg-smoke.mp4
+          test "$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of default=noprint_wrappers=1:nokey=1 qa-proof/ffmpeg-smoke.mp4)" = "192"
+          test -n "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 qa-proof/ffmpeg-smoke.mp4)"
+          echo 'FFMPEG_FULL_SAMPLE_DECODE_AND_AUDIO_PASS 192/192'
+      - name: Validate bounded-memory full-FFmpeg diagnostic capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          node ci/free-media/check-disk-spool.mjs
+      - name: Final proof summary (smoke only; no publish authorization)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum qa-proof/eevee-smoke.png qa-proof/ffmpeg-smoke.mp4
+          printf '%s\n' 'FREE_PUBLIC_CPU_RUNTIME_SMOKE_PASS'
+          printf '%s\n' 'PRIVATE_ENGINE_SOURCE_NOT_PRESENT'
+          printf '%s\n' 'CE_AND_PIKOPOP_5M_10M_PRODUCTION_UNVERIFIED_RELEASE_BLOCKED'
