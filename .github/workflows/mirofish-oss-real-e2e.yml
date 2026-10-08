@@ -50,7 +50,9 @@ jobs:
           git -C /tmp/mirofish-deps fetch --depth 1 origin 8d4eea4dfa981ecd23c3b385953b4085dfd9b6ca
           git -C /tmp/mirofish-deps checkout -q FETCH_HEAD
           python -m pip install -r /tmp/mirofish-deps/backend/requirements.txt
-          python -m pip install 'transformers>=4.50,<5' 'accelerate>=1,<2'
+          # CAMEL 0.2.78 imports legacy FastMCP; MCP v2 removed that symbol.
+          python -m pip install 'mcp==1.29.0' 'transformers>=4.50,<5' 'accelerate>=1,<2'
+          python -c 'from mcp.server import FastMCP; from camel.models import ModelFactory; import oasis; print("MCP/CAMEL/OASIS imports: PASS")'
           python -m pip check
       - name: Execute real local model + simulation + report
         shell: bash
