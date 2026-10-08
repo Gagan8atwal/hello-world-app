@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PIN = "8d4eea4dfa981ecd23c3b385953b4085dfd9b6ca"
 UPSTREAM = "https://github.com/shayswrld/mirofish.git"
-MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"
+MODEL_ID = "Qwen/Qwen2.5-1.5B-Instruct"
 OUTPUT = pathlib.Path("mirofish-real-e2e.json").resolve()
 RESULT = {"test": "MiroFish public OSS end-to-end test",
           "upstream": UPSTREAM, "upstream_sha": PIN, "model": MODEL_ID,
