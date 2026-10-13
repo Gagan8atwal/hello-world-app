@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: mirofish-oss-real-e2e-free
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   oss-simulation:
