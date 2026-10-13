@@ -36,14 +36,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile lab/mirofish-open-oss-e2e.py lab/mirofish-real-tool-adapter.py
-          python lab/test-mirofish-real-tool-adapter.py
-          python - <<'PY'
-          import os
-          for key in ("ALOS_GITHUB_SOURCE_TOKEN","OPENAI_API_KEY","KAGGLE_API_TOKEN"):
-              assert not os.environ.get(key), f"Forbidden environment key: {key}"
-          print("Public, synthetic-only test admitted; no production secrets.")
-          PY
+          echo 'Checking Python source syntax and tool-call adapter'
+          timeout 40s python -m py_compile lab/mirofish-open-oss-e2e.py lab/mirofish-real-tool-adapter.py
+          timeout 40s python -u lab/test-mirofish-real-tool-adapter.py
+          python -c 'import os; forbidden=("ALOS_GITHUB_SOURCE_TOKEN","OPENAI_API_KEY","KAGGLE_API_TOKEN"); assert not any(os.environ.get(k) for k in forbidden), "Forbidden credentials detected"; print("Public synthetic-only test admitted")'
       - name: Install pinned upstream MiroFish environment
         shell: bash
         run: |
