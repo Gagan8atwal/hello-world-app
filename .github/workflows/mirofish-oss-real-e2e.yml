@@ -33,7 +33,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m py_compile lab/mirofish-open-oss-e2e.py
+          python -m py_compile lab/mirofish-open-oss-e2e.py lab/mirofish-real-tool-adapter.py
+          python lab/test-mirofish-real-tool-adapter.py
           python - <<'PY'
           import os
           for key in ("ALOS_GITHUB_SOURCE_TOKEN","OPENAI_API_KEY","KAGGLE_API_TOKEN"):
