@@ -5,6 +5,9 @@ on:
     branches: [lab/mirofish-public-e2e-20261008]
     paths:
       - lab/mirofish-open-oss-e2e.py
+      - lab/mirofish-real-tool-adapter.py
+      - lab/test-mirofish-real-tool-adapter.py
+      - lab/mirofish-evidence-qa.py
       - .github/workflows/mirofish-oss-real-e2e.yml
   workflow_dispatch:
 
