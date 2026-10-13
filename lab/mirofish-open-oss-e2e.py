@@ -17,7 +17,7 @@ RESULT = {"test": "MiroFish public OSS end-to-end test",
           "data": "synthetic", "production_secrets_used": False,
           "paid_model_api_calls": 0, "full_e2e_certified": False,
           "steps": {}, "overall": "FAIL"}
-counts = {"chat_completions": 0, "model_inferences": 0, "endpoint_errors": 0}
+counts = {"chat_completions": 0, "model_inferences": 0, "endpoint_errors": 0, "tool_requests": 0, "valid_model_tool_calls": 0}
 scratch = pathlib.Path(tempfile.mkdtemp(prefix="mirofish-public-oss-"))
 source = scratch / "MiroFish"
 model = tokenizer = torch = server = None
@@ -108,10 +108,27 @@ class API(BaseHTTPRequestHandler):
             length=int(self.headers.get("Content-Length", "0"))
             if not (0 < length <= 250000): raise ValueError("unsupported request size")
             body = json.loads(self.rfile.read(length))
-            text = infer(body.get("messages", []), (body.get("response_format") or {}).get("type") == "json_object")
+            tool_specs = body.get("tools") or []
+            if tool_specs and body.get("tool_choice") != "none":
+                # True local model-generated JSON tool decision -> OpenAI protocol.
+                # No tool names, arguments or social actions are fabricated.
+                import runpy
+                adapter = runpy.run_path("lab/mirofish-real-tool-adapter.py")
+                counts["tool_requests"] += 1
+                messages = list(body.get("messages", []))
+                messages.append({"role": "user", "content": adapter["tool_instruction"](tool_specs)})
+                text = infer(messages, False)
+                message, finish_reason, selected = adapter["make_model_driven_tool_response"](
+                    text, body)
+                if selected:
+                    counts["valid_model_tool_calls"] += 1
+            else:
+                text = infer(body.get("messages", []),
+                             (body.get("response_format") or {}).get("type") == "json_object")
+                message, finish_reason = {"role": "assistant", "content": text}, "stop"
             answer = {"id": "local-oss-chat", "object": "chat.completion", "created": int(time.time()),
-                      "model": MODEL_ID, "choices": [{"index": 0, "finish_reason": "stop",
-                          "message": {"role": "assistant", "content": text}}],
+                      "model": MODEL_ID, "choices": [{"index": 0, "finish_reason": finish_reason,
+                          "message": message}],
                       "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
             counts["chat_completions"] += 1
             # Diagnostic only: record real model responses without altering their content.
