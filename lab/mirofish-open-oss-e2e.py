@@ -114,6 +114,9 @@ class API(BaseHTTPRequestHandler):
                           "message": {"role": "assistant", "content": text}}],
                       "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}}
             counts["chat_completions"] += 1
+            # Diagnostic only: record real model responses without altering their content.
+            if counts["chat_completions"] <= 24:
+                print("MIROFISH_MODEL_GENERATION=" + json.dumps({"index":counts["chat_completions"],"sample":text[:750]},ensure_ascii=False), flush=True)
             payload=json.dumps(answer).encode("utf-8")
             self.send_response(200)
         except Exception as exc:
@@ -208,6 +211,26 @@ def oasis_one_round():
     p=subprocess.run(args, cwd=source/"backend", env=os.environ.copy(),
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=600)
     out.write_text(p.stdout[-20000:])
+    print("OASIS_PROCESS_DIAGNOSTICS=" + json.dumps({"return_code":p.returncode,
+           "output_tail":p.stdout[-7500:]},ensure_ascii=False), flush=True)
+    try:
+        import sqlite3
+        db=path/"reddit_simulation.db"
+        if db.exists():
+            with sqlite3.connect(str(db)) as conn:
+                tables=[row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+                samples={}
+                for table in tables:
+                    if table.isidentifier() and not table.startswith("sqlite_"):
+                        columns=[r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+                        samples[table]={"rows":conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                                        "columns":columns[:15]}
+                print("OASIS_DATABASE_DIAGNOSTICS=" + json.dumps(samples),flush=True)
+    except Exception as diag_exc:
+        print("OASIS_DATABASE_DIAGNOSTIC_ERROR=" + repr(diag_exc),flush=True)
+    action_logs=list(path.rglob("actions.jsonl"))
+    print("OASIS_ACTION_LOG_TAILS=" + json.dumps({str(p.relative_to(path)):p.read_text(encoding="utf-8")[-3500:]
+         for p in action_logs},ensure_ascii=False),flush=True)
     assert p.returncode == 0, f"OASIS process exited {p.returncode}: {p.stdout[-2000:]}"
     import runpy
     qa=runpy.run_path("lab/mirofish-evidence-qa.py")
