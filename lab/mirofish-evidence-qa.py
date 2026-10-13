@@ -37,6 +37,27 @@ def inspect_agent_actions(sim_dir):
             "action_types": sorted(set(str(x["action_type"]) for x in real_actions)),
             "distinct_agent_ids": len({x["agent_id"] for x in real_actions})}
 
+def assert_grounded_report_text(text, require_both_names=True):
+    """Fail closed on output that omits source identities or invents incidents."""
+    assert isinstance(text, str) and text.strip(), "Missing report narrative"
+    if require_both_names:
+        assert "Fictional Customer" in text and "Fictional Shopkeeper" in text, (
+            "Report lacks both exact verified graph identities")
+    assert re.search(r"\b(?:CREATE_POST|social posts?|simulated posts?|OASIS actions?)\b",
+                     text, re.I), "Report does not describe genuine simulated social actions"
+    unsupported = [
+        r"\btechnical (?:glitch|issues?|failures?|fault)\b",
+        r"\bsystem malfunction(?:ed|ing)?\b",
+        r"\b(?:shop|business) (?:continued|maintained) (?:its )?(?:normal )?operations\b",
+        r"\b(?:sent|emailed|delivered|received) (?:a |the |another )?(?:repair )?quote\b",
+        r"\b(?:actual|real) (?:phone )?call (?:was )?(?:missed|received|placed)\b",
+        r"\b(?:guaranteed|definite) (?:revenue|profit|customer retention)\b",
+    ]
+    for pattern in unsupported:
+        assert not re.search(pattern, text, re.I), (
+            "Unsupported report claim matched: " + pattern)
+    return True
+
 def inspect_report(markdown):
     assert isinstance(markdown, str), "Report must be text"
     assert len(markdown.strip()) >= 300, "Generated report too short"
@@ -48,8 +69,7 @@ def inspect_report(markdown):
     assert not placeholders.intersection(normalized), "Report has generated placeholder headings"
     assert re.search(r"\b(missed|call|phone|shop|lead|customer)\b", markdown, re.I), \
         "Generated report lacks any case-specific language"
-    assert "Fictional Customer" in markdown and "Fictional Shopkeeper" in markdown, (
-        "Native report did not ground its content in both source-graph entities")
+    assert_grounded_report_text(markdown)
     # Retrieval progress previously appeared as 3/5 and the small model
     # invented 60% customer contact conversion from that diagnostic counter.
     # No business measurements exist in this synthetic trial.
