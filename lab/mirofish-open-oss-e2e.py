@@ -70,9 +70,13 @@ def load_model():
     torch = t
     torch.set_num_threads(2)
     tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=torch.float32)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    precision = torch.float16 if device == "cuda" else torch.float32
+    model = AutoModelForCausalLM.from_pretrained(MODEL_ID, torch_dtype=precision)
+    model = model.to(device)
     model.eval()
-    return {"parameters": sum(p.numel() for p in model.parameters()), "device": "cpu"}
+    return {"parameters": sum(p.numel() for p in model.parameters()), "device": device,
+            "cuda_available": torch.cuda.is_available()}
 
 def infer(messages, json_mode=False):
     messages = [m for m in messages if isinstance(m, dict)]
@@ -90,7 +94,7 @@ def infer(messages, json_mode=False):
                      "content": text[:1800]})
     with lock:
         input_ids = tokenizer.apply_chat_template(conv, tokenize=True, add_generation_prompt=True,
-                                                  return_tensors="pt")[:, -3500:]
+                                                  return_tensors="pt")[:, -3500:].to(model.device)
         with torch.inference_mode():
             output = model.generate(input_ids, max_new_tokens=480, do_sample=False,
                                     pad_token_id=tokenizer.eos_token_id)
