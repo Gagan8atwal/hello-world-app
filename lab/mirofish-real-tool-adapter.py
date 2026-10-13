@@ -22,31 +22,51 @@ def compact_functions(tools):
 
 def tool_instruction(tools):
     functions=compact_functions(tools)
-    names={f["name"] for f in functions}
-    # The CPU lab measures agent-generated content actions. The real OASIS
-    # tool set remains authoritative. Prompt only a supported subset:
-    # displaying 13 verbose tool definitions made 1.5B Qwen hallucinate
-    # unsupported "join_group" even when the allowed list excluded it.
     targeted=[f for f in functions if f["name"] == "create_post"]
     if not targeted:
-        targeted=[f for f in functions if f["name"] in {"create_comment","like_post"}]
+        targeted=[f for f in functions if f["name"] in {"create_comment","search_posts","refresh"}]
     if not targeted:
-        targeted=functions[:2]
-    assert targeted, "No legal tools provided by upstream OASIS"
-    allowed=", ".join(f["name"] for f in targeted)
+        targeted=functions[:3]
+    if not targeted:
+        raise ValueError("OASIS did not provide standard callable function tools")
+    names=", ".join(f["name"] for f in targeted)
     return (
-        "This is an entirely fictional Reddit-style simulation. "
-        "You MUST select exactly ONE FUNCTION whose name is in this allowed list: "
-        + allowed + ". "
-        "You are a fictional customer or shopkeeper discussing a missed repair quote. "
-        "If create_post is available, write a natural original post about the fictional missed "
-        "repair quote, with at least twenty words. Do not use a canned example. "
-        "Never choose join_group, create_group, or any unlisted name. "
-        "Return ONLY ONE JSON object with keys name and arguments. "
-        "arguments must be an object of exactly the required parameters, "
-        "using your own generated text. No markdown, no reasoning, no extra text.\n"
-        "EXACT VALID TOOL SCHEMA:\n" + json.dumps(targeted,ensure_ascii=False,separators=(",",":"))[:1900]
+        "YOU ARE IN A SYNTHETIC TEST OF AN OASIS REDDIT-LIKE SOCIAL AGENT. "
+        "Only functions listed below exist. Choose ONE of these actions in JSON "
+        "using your own ORIGINAL writing. Your answer must be a SINGLE JSON object "
+        "with exactly two keys: name and arguments. "
+        "name MUST be one of: " + names + ". "
+        "Never use join_group or other functions that are not on the list. "
+        "If create_post is permitted, write a thoughtful original social media "
+        "post (30 to 55 words) about how a fictional auto repair shop could reply "
+        "to a fictional customer's missed quote request. "
+        "Use the parameter names and required types exactly. "
+        "Return JSON ONLY, no code fence or commentary. "
+        "AVAILABLE FUNCTION SCHEMA: "
+        + json.dumps(targeted, ensure_ascii=False, separators=(",",":"))[:3500]
     )
+
+def isolated_agent_messages(tools, original_messages):
+    # Keep factual profile context, but strip old multi-tool system directives.
+    # Strong system-level format instruction prevents a small LLM hallucinating
+    # functions that the OASIS agent did not actually expose.
+    directive=tool_instruction(tools)
+    profile=""
+    for m in original_messages[-4:]:
+        txt=m.get("content","")
+        if isinstance(txt,str) and any(w in txt.lower() for w in ("fictional", "shopkeeper", "customer")):
+            profile=txt[-400:]
+            break
+    return [
+        {"role":"system","content":directive},
+        {"role":"user","content":(
+            "As a synthetic social agent, select ONE permitted function and "
+            "generate ORIGINAL arguments. Scenario: fictional shopkeeper and "
+            "fictional customer discussing a missed repair quote. "
+            + ("Profile context: "+profile if profile else "") +
+            " Reply with exactly one JSON object."
+        )}
+    ]
 
 def parse_actual_model_choice(raw, tools):
     """Parse model-generated text only; malformed generations remain failures."""
