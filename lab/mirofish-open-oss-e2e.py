@@ -115,8 +115,10 @@ class API(BaseHTTPRequestHandler):
                 import runpy
                 adapter = runpy.run_path("lab/mirofish-real-tool-adapter.py")
                 counts["tool_requests"] += 1
-                messages = list(body.get("messages", []))
-                messages.append({"role": "user", "content": adapter["tool_instruction"](tool_specs)})
+                messages = adapter["isolated_agent_messages"](tool_specs, body.get("messages", []))
+                if counts["tool_requests"] <= 2:
+                    print("ACTUAL_OASIS_TOOLS=" + json.dumps(
+                        [f["name"] for f in adapter["compact_functions"](tool_specs)]),flush=True)
                 text = infer(messages, False)
                 message, finish_reason, selected = adapter["make_model_driven_tool_response"](
                     text, body)
