@@ -22,14 +22,30 @@ def compact_functions(tools):
 
 def tool_instruction(tools):
     functions=compact_functions(tools)
+    names={f["name"] for f in functions}
+    # The CPU lab measures agent-generated content actions. The real OASIS
+    # tool set remains authoritative. Prompt only a supported subset:
+    # displaying 13 verbose tool definitions made 1.5B Qwen hallucinate
+    # unsupported "join_group" even when the allowed list excluded it.
+    targeted=[f for f in functions if f["name"] == "create_post"]
+    if not targeted:
+        targeted=[f for f in functions if f["name"] in {"create_comment","like_post"}]
+    if not targeted:
+        targeted=functions[:2]
+    assert targeted, "No legal tools provided by upstream OASIS"
+    allowed=", ".join(f["name"] for f in targeted)
     return (
-        "You are choosing one real action for a simulated social-media agent. "
-        "Use the provided function schema to choose a real action, not a description. "
-        "Your entire reply MUST be the following XML element with actual valid JSON. "
-        "The function name must match a supplied function name and arguments must satisfy its parameters. "
-        "Do not make up function names, don't add explanations, and don't output markdown.\n"
-        '<tool_call>{"name":"NAME_FROM_LIST","arguments":{"parameter":"value"}}</tool_call>\n'
-        "Available tools:\n" + json.dumps(functions,ensure_ascii=False)[:13000]
+        "This is an entirely fictional Reddit-style simulation. "
+        "You MUST select exactly ONE FUNCTION whose name is in this allowed list: "
+        + allowed + ". "
+        "You are a fictional customer or shopkeeper discussing a missed repair quote. "
+        "If create_post is available, write a natural original post about the fictional missed "
+        "repair quote, with at least twenty words. Do not use a canned example. "
+        "Never choose join_group, create_group, or any unlisted name. "
+        "Return ONLY ONE JSON object with keys name and arguments. "
+        "arguments must be an object of exactly the required parameters, "
+        "using your own generated text. No markdown, no reasoning, no extra text.\n"
+        "EXACT VALID TOOL SCHEMA:\n" + json.dumps(targeted,ensure_ascii=False,separators=(",",":"))[:1900]
     )
 
 def parse_actual_model_choice(raw, tools):
