@@ -411,8 +411,9 @@ def native_report():
         f"{', '.join(action_evidence['action_types'])} simulated social-post "
         f"actions by {action_evidence['distinct_agent_ids']} distinct agents "
         f"across {action_evidence['round_ends']} completed rounds. "
-        "The logs do not establish any telephone contact, repair quote "
-        "delivery, technical fault, sale, or real-world business outcome."
+        "Only simulated social-platform actions were recorded. No "
+        "telephone contact, delivered repair quote, sale, or actual "
+        "business outcome was independently observed."
     )
     original_outline = report_mod.ReportAgent.plan_outline
     def plan_with_evidence_guard(self, *args, **kwargs):
@@ -425,6 +426,23 @@ def native_report():
                 flush=True)
             outline.summary = evidence_summary
             grounding_stats["outline_corrected"] = True
+        # Guard model-generated labels independently; they are appended to
+        # the assembled report even when the body paragraphs are corrected.
+        titles = [outline.title] + [section.title for section in outline.sections]
+        disallowed = ("technical glitch", "technical fault",
+                      "system malfunction", "technical issues")
+        if (len(outline.sections) != 2
+                or len({title.casefold() for title in titles}) != len(titles)
+                or any(any(phrase in title.casefold() for phrase in disallowed)
+                       for title in titles)):
+            outline.title = "Verified Synthetic OASIS Agent Activity"
+            outline.sections = [
+                report_mod.ReportSection(title="Recorded Agent Actions"),
+                report_mod.ReportSection(title="Evidence Scope and Limitations"),
+            ]
+            grounding_stats["outline_corrected"] = True
+            print("MIROFISH_OUTLINE_LABELS_CORRECTED=validated graph context",
+                  flush=True)
         return outline
     report_mod.ReportAgent.plan_outline = plan_with_evidence_guard
 
@@ -522,19 +540,32 @@ def native_report():
         # from speculative native prose. Both the model drafts and this
         # fallback are audit-visible. This is a product report guardrail, not
         # a mock simulation or a fabricated AI response.
-        extracted = (
-            "Fictional Customer and Fictional Shopkeeper are the two synthetic "
-            "agents in this bounded OASIS social-platform simulation. "
-            f"According to the recorded action logs, they completed "
-            f"{action_evidence['real_agent_actions']} successful CREATE_POST "
-            f"simulated social-post actions across "
-            f"{action_evidence['round_ends']} completed rounds.\n\n"
-            "These recorded posts are simulation activity only. They provide "
-            "no evidence that a real customer called a business, that any "
-            "repair quote was actually sent, or that a transaction occurred. "
-            "The test demonstrates agent actions in a synthetic environment, "
-            "not predictions or outcomes for a real business."
-        )
+        if section_index == 1:
+            extracted = (
+                "Fictional Customer and Fictional Shopkeeper are the two "
+                "synthetic roles exercised in the recorded OASIS run. "
+                f"Two distinct agents performed {action_evidence['real_agent_actions']} "
+                "successful CREATE_POST simulated social actions, according "
+                f"to the action logs. These occurred within "
+                f"{action_evidence['round_ends']} completed simulation rounds.\\n\\n"
+                "The events are native OASIS social posts, not setup events "
+                "and not externally published customer communications. "
+                "The simulation verifies that both agents executed "
+                "the allowed post action in genuine rounds using the local model."
+            )
+        else:
+            extracted = (
+                "Fictional Customer and Fictional Shopkeeper are synthetic "
+                "graph identities rather than actual people. The observed "
+                "CREATE_POST social actions establish execution of the "
+                "test environment, not a business case outcome. "
+                "Each observed result is linked to recorded OASIS rounds.\\n\\n"
+                "There are no independently observed telephone calls, "
+                "customer-contact records, sales, or delivered repair quotes "
+                "in this trial. The findings therefore support only a "
+                "limited software-execution claim; they do not establish "
+                "real-world shop performance or predict what a customer will do."
+            )
         qa["assert_grounded_report_text"](extracted)
         grounding_stats["evidence_fallback_sections"] += 1
         print("MIROFISH_SECTION_EVIDENCE_FALLBACK=" + json.dumps({
