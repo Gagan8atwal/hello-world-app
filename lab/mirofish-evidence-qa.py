@@ -85,10 +85,11 @@ def inspect_report(markdown):
     # Retrieval progress previously appeared as 3/5 and the small model
     # invented 60% customer contact conversion from that diagnostic counter.
     # No business measurements exist in this synthetic trial.
-    assert not re.search(r"\\b(?:success|conversion|contact)\\s+rate\\b|"
-                         r"\\b(?:three|3)\\s+(?:out of|of)\\s+(?:five|5)\\b|"
-                         r"\\b(?:attempted contacts|five callers)\\b|"
-                         r"\\b\\d+(?:\\.\\d+)?\\s*%|\\b\\d+(?:\\.\\d+)?\\s+percent\\b",
-                         markdown, re.I), "Unsupported business conversion metrics in report"
+    assert not re.search(
+        r"\b(?:success|conversion|contact)\s+rate\b|"
+        r"\b(?:three|3)\s+(?:out of|of)\s+(?:five|5)\b|"
+        r"\b(?:attempted contacts|five callers)\b|"
+        r"\b\d+(?:\.\d+)?\s*%|\b\d+(?:\.\d+)?\s+percent\b",
+        markdown, re.I), "Unsupported business conversion metrics in report"
     return {"characters": len(markdown), "headings": len(heads),
             "distinct_headings": len(set(normalized)), "case_specific_terms": True}
