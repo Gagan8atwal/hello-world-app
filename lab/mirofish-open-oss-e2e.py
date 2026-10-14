@@ -411,10 +411,11 @@ def native_report():
         f"{', '.join(action_evidence['action_types'])} simulated social-post "
         f"actions by {action_evidence['distinct_agent_ids']} distinct agents "
         f"across {action_evidence['round_ends']} completed rounds. "
-        "Only simulated social-platform actions were recorded. No "
-        "telephone contact, delivered repair quote, sale, or actual "
-        "business outcome was independently observed."
+        "Only simulated social-platform actions were recorded. The "
+        "run did not independently observe direct customer contact, "
+        "financial transactions, or real-world shop outcomes."
     )
+    qa["assert_grounded_report_text"](evidence_summary)
     original_outline = report_mod.ReportAgent.plan_outline
     def plan_with_evidence_guard(self, *args, **kwargs):
         outline = original_outline(self, *args, **kwargs)
@@ -547,7 +548,7 @@ def native_report():
                 f"Two distinct agents performed {action_evidence['real_agent_actions']} "
                 "successful CREATE_POST simulated social actions, according "
                 f"to the action logs. These occurred within "
-                f"{action_evidence['round_ends']} completed simulation rounds.\\n\\n"
+                f"{action_evidence['round_ends']} completed simulation rounds.\n\n"
                 "The events are native OASIS social posts, not setup events "
                 "and not externally published customer communications. "
                 "The simulation verifies that both agents executed "
@@ -559,7 +560,7 @@ def native_report():
                 "graph identities rather than actual people. The observed "
                 "CREATE_POST social actions establish execution of the "
                 "test environment, not a business case outcome. "
-                "Each observed result is linked to recorded OASIS rounds.\\n\\n"
+                "Each observed result is linked to recorded OASIS rounds.\n\n"
                 "There are no independently observed telephone calls, "
                 "customer-contact records, sales, or delivered repair quotes "
                 "in this trial. The findings therefore support only a "
