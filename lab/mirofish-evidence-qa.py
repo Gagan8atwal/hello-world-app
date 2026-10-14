@@ -72,9 +72,9 @@ def inspect_report(markdown):
     assert_grounded_report_text(markdown)
     # Two distinct headings must not conceal duplicated filler paragraphs.
     section_bodies = re.findall(
-        r"(?ms)^##[ ]+[^\\n]+\\n(.*?)(?=^##[ ]+|\\Z)", markdown)
+        r"(?ms)^##[ ]+[^\n]+\n(.*?)(?=^##[ ]+|\Z)", markdown)
     normalized_bodies = [
-        re.sub(r"\\s+", " ", body).strip().casefold()
+        re.sub(r"\s+", " ", body).strip().casefold()
         for body in section_bodies
     ]
     assert len(normalized_bodies) >= 2, "Fewer than two actual report sections"
